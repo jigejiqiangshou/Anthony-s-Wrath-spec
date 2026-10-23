@@ -12,16 +12,16 @@
 
 ## R-002 构建与依赖布局
 
-- **Decision**: 顶层 `pom.xml` 显式声明 `sourceDirectory` 指向 `src/main/java`、`resources` 指向 `src/main/resources`（两者位于 `src/` 子模块内）；游戏本体、ModTheSpire、BaseMod、StSLib 的 jar 只放顶层 `libs/`，`*.jar` 一律不入库；版本键写入 `pom.xml` 的 `<properties>` 作为唯一事实来源。
+- **Decision**: 顶层 `pom.xml` 显式声明 `sourceDirectory` 指向 `src/main/java`、`resources` 指向 `src/main/resources`（两者位于 `src/` 子模块内）；游戏本体、ModTheSpire、BaseMod、StSLib 的 jar 只放顶层 `libs/`，`*.jar` 一律不入库；版本键写入 `pom.xml` 的 `<properties>` 作为唯一事实来源。其中游戏本体与 ModTheSpire 以 provided / compileOnly 方式仅作平台产物参与编译，不视为第三方依赖。
 - **Rationale**: 满足宪法第八条（构建配置归属顶层）与宪法引言（版本可独立查得），同时让 `.gitignore` 的 `*.jar` 规则保持最终效力，不需要白名单例外。
 - **Alternatives considered**: 把构建配置放进 `src/` 子模块（否决：违反宪法第八条）；在代码里硬编码版本号（否决：违反宪法引言）。
 
 ## R-003 扩展入口（BaseMod 订阅者）
 
-- **Decision**: 入口类实现并订阅：`EditCardsSubscriber.receiveEditCards`（注册诅咒牌）、`EditStringsSubscriber.receiveEditStrings`（加载双语文本）、自定义模式选项注册接口（`receiveAddCustomModeMods`，接口名在装上 BaseMod jar 后按实物核对）、`PostCreateStartingDeckSubscriber.receivePostCreateStartingDeck`（开局注入）、`PostDungeonInitializeSubscriber.receivePostDungeonInitialize`（随机诅咒池排除）；初始化阶段完成 `BaseMod.subscribe(this)`。
+- **Decision**: 入口类实现并订阅：`EditCardsSubscriber.receiveEditCards`（注册诅咒牌）、`EditStringsSubscriber.receiveEditStrings`（加载双语文本）、`AddCustomModeModsSubscriber.receiveCustomModeMods(List<CustomMod>)`（注册自定义模式选项）、`PostCreateStartingDeckSubscriber.receivePostCreateStartingDeck(PlayerClass, CardGroup)`（开局注入）、`PostDungeonInitializeSubscriber.receivePostDungeonInitialize`（随机诅咒池排除）；初始化阶段完成 `BaseMod.subscribe(this)`。
 - **Rationale**: 全部走 BaseMod 公开订阅点，避免不必要的原版补丁；只有订阅点覆盖不到的判定才进 `patches/vanilla/`。
 - **Alternatives considered**: 全部用补丁实现（否决：补丁面积大、升级游戏版本时易碎）。
-- **Open item**: 选项注册接口的确切名称（`CustomModeMods` 还是 `AddCustomModeModsSubscriber`）尚无实物可证，装上 BaseMod jar 后以 jar 内类名为准，并回写本文件。
+- **Verified（2026-10-24，实物核对）**: `libs/BaseMod.jar` 内实有 `basemod/interfaces/AddCustomModeModsSubscriber.class`，方法为 `receiveCustomModeMods(java.util.List<com.megacrit.cardcrawl.screens.custom.CustomMod>)`；对应发布端 `BaseMod.publishAddCustomModeMods(List<CustomMod>)`。旧文档中的 `CustomModeMods` / `receiveAddCustomModeMods` 不存在，作废。方法：`jar tf` + `javap`，证据见 `memory/facts/f009` 与 `memory/log/014`。
 
 ## R-004 洗牌后置底介入点（待探针）
 
@@ -32,7 +32,7 @@
 ## R-005 入手判定点（待探针）
 
 - **Decision**: 由时序探针确认「效果直接取牌」是否与「抽牌动作」走同一判定点；能共用则只实现一个判定点，不能共用则另建覆盖直接取牌的监听。任一实现都必须在取得动作完成时立即判负，并置位本局一次性守卫。若两条路都不可行，**不得**缩减规格覆盖范围，须回到 `/speckit-clarify` 重新界定 EC-008。
-- **Rationale**: FR-008、EC-008 要求两条路径都判负；EC-004/010 要求只结算一次、后续不再处理抽牌。
+- **Rationale**: FR-008、EC-008 要求两条路径都判负；EC-004 与 FR-010 要求只结算一次、后续不再处理抽牌。
 - **Alternatives considered**: 仅在回合结束扫描手牌（否决：不满足「同一瞬间结束」）。
 
 ## R-006 开局注入时机（待探针）
@@ -71,6 +71,18 @@
 - **Rationale**: 宪法第六条；`memory/README.md` 的严入标准。
 - **Alternatives considered**: 把实测记录直接写进规格（否决：污染需求文档，且无法容纳过程数据）。
 
+## R-012 未加载 mod 的旧档容错（路线 a）
+
+- **Decision**: EC-006 的容错由游戏本体 / BaseMod 对未知自定义模式项的既有处理提供；本 mod 不承诺、也无法在「mod 未加载」时执行自身代码。验证方式为 QS-14（卸载 / 禁用本 mod 后加载旧档）；实测若崩溃，则停止该路线并回到 `/speckit-clarify` 重新界定 EC-006。
+- **Rationale**: 未加载的 mod 没有执行机会，容错只能在加载器 / 本体侧；把它写成 mod 侧实现任务不可执行。mod 侧保留「读取自定义模式项列表时忽略未知标识」的健壮性即可。
+- **Alternatives considered**: 在 mod 内实现「未见过的选项标识容错」（否决：覆盖不到本 mod 未加载的读数场景，只能防其它来源的未知项）。
+
+## R-013 FR-005 的验证路线（路线 b）
+
+- **Decision**: 本牌入手即判负、无法自然停留在手牌，故用**探针版临时关闭「抽到即负」**在开发期实测「不可打出 / 不可被主动消耗」，并与参照牌同条件对照（含持「蓝蜡烛」的一次）；正常版只验判负。该开关只存在于探针构建，随 T035 一并移除，发布版不含。
+- **Rationale**: 直接观察不可打出需要牌停在手牌，正常版不可达；探针 + 参照牌对照兼顾可验证性与发布安全；本轮选择路线 b。
+- **Alternatives considered**: 只做参照牌对照 +「不可达」论证（否决：对 FR-005 的直接验证不足）；在发布版保留调试开关（否决：违背发布洁净与不可被利用）。
+
 ## 风险与兜底（Risks and Fallbacks）
 
 - **置底介入点覆盖不全**（最可能出问题）：探针需覆盖首次洗牌、耗尽重洗与非耗尽重洗；必要时在抽牌前加一道兜底校正，两道防线可并存，重复校正无副作用。
@@ -85,6 +97,7 @@
 ## 参考证据
 
 - `memory/facts/f005`：本体不可移除与随机诅咒池都是硬编码 cardID 名单（V2.3.4 反汇编）。
+- `memory/facts/f009`：BaseMod jar 实物的订阅接口名与签名（选项注册、注册牌、文本、开局注入、诅咒池钩子），以及 `CustomMod` 构造器（V2.3.4）。
 - `memory/log/007`：参照牌类参数、文本出处与枚举过程。
 - `memory/log/009`：第四轮 analyze 的口径与探针问题清单。
 - `specs/_archive/001-anthonys-wrath/`：迁移前的旧三件套。
