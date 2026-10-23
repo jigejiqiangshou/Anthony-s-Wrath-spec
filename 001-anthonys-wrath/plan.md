@@ -1,151 +1,90 @@
-# Plan: 安东尼之怒 (Anthony's Wrath)
+# Implementation Plan: 安东尼之怒（Anthony's Wrath）
+
+**Branch**: N/A | **Date**: 2026-10-23 | **Spec**: [spec.md](./spec.md)
+
+**Input**: Feature specification from `specs/001-anthonys-wrath/spec.md`
+
+## Summary
+
+为自定义模式增加负面选项「安东尼之怒」：选中时在开局牌组加入一张同名诅咒牌，该牌在每次洗牌后必定位于抽牌堆最底部，玩家抽到它（或经效果直接取得）时本局立即判负，且无法通过任何「移除卡牌」途径除去、不会被随机诅咒来源发出。技术路线：用 BaseMod 订阅者注册选项 / 诅咒牌 / 双语文本 / 开局注入，用 `patches/vanilla/` 拦截本体硬编码的不可移除与随机诅咒池判定点，置底与入手判定落点由游戏内时序探针实测后确定；仅依赖 BaseMod、StSLib 与 Java 标准库，Java 8 + Maven，源码与资源位于 `src/` 子模块。
 
 ## Technical Context
 
-- 项目现状：项目为三层结构，三层的挂载点与版本锁定已就绪（顶层仓库以 gitlink 记录 `specs/`、`memory/`、`src/` 三个子模块的提交），但 `src/` 内尚无任何源码，本功能负责建立项目骨架。
-- 三层职责：`specs/` 存放 spec / plan / tasks；`memory/` 由 `agent-dev-memory` 技能治理，只登记路径引用；`src/` 存放全部代码与资源；顶层只放项目配置。
-- 骨架横跨两层：Maven 工程文件（`pom.xml`）在顶层，源码与资源在 `src/` 子模块内。
-- 目标运行时：Slay the Spire 1.x + ModTheSpire 加载器；BaseMod 与 StSLib 作为基础 mod 同时加载。**运行期前置（T004 起的一切游戏内任务共用，一次性完成）**：游戏目录 `mods/` 下须装好 ModTheSpire 加载器与 BaseMod、StSLib，且启动器的 mod 列表能同时列出并启用三者；这一步由人工完成（Steam 创意工坊订阅或手动放入 jar），本仓库不提交任何 jar，安装结果以启动器截图或加载日志记入 `memory/log/` 作为可查证据。在此之前 T004 探针无法在游戏内执行。
-- 构建工具链：Java 8 目标 + Maven（沿用已就绪的环境，不引入 Gradle）。`pom.xml` 置于顶层仓库，并以显式 `sourceDirectory` / `resources` 指向 `src/` 子模块内的源码与资源目录。
-- 游戏版本锁定：跟随安装的 1.x 最新稳定补丁；具体版本号以顶层 `pom.xml` 的 `<properties>` 为唯一事实来源（游戏补丁、ModTheSpire、BaseMod、StSLib 各自的版本键），由 T002 写入并在该处维护，不在本文件重复。
-- mod 标识与命名空间：mod 标识与 Java 包名沿用构建配置中的属性键，形如 `<modId>` 与 `<groupId>.<package>`，由 T001 确定后写入构建配置；选项标识形如 `<modId>:AnthonysWrathOption`，玩家资源命名空间为 `strings/<modId>/`——三者都以构建配置为唯一依据，不在代码中硬编码第二份。
-- 扩展方式：BaseMod 的 `CustomMod` 注册自定义模式选项、`CustomCard` 注册诅咒牌、订阅者接口响应游戏事件。订阅点包括 `EditCardsSubscriber.receiveEditCards`、`EditStringsSubscriber.receiveEditStrings`、`CustomModeMods`（`receiveAddCustomModeMods`）、`PostCreateStartingDeckSubscriber.receivePostCreateStartingDeck`，以及由 T004 探针结论决定的位置控制与入手判定钩子；另用 `PostDungeonInitializeSubscriber.receivePostDungeonInitialize` 把本牌移出随机诅咒池（时序须由 T004 确认晚于 `AbstractDungeon.initializeCardPools()`，见 Architecture 第 8 项与 T009）。
-- 时序未知项：抽牌堆的首次洗牌时机、以及非抽牌方式取牌的事件触发情况，均无公开文档可依据，因此本 plan 把机制验证排在任何实现之前（见 Testing Strategy 的 T-P1，其任务号为 T004）。
-- 测试框架：不引入任何自动化测试框架（受宪法第一条约束），验证方式为游戏内实测 + 可复现步骤记录。
+**Language/Version**: Java 8（编译目标与运行目标均为 Java 8，不使用更高版本语法与 API）
 
-## Constraints from Constitution and Specification
+**Primary Dependencies**: ModTheSpire 加载器、BaseMod、StSLib，以及 Java 标准库；编译期依赖 jar（游戏本体、ModTheSpire、BaseMod、StSLib）统一放在顶层 `libs/`，一律不入库
 
-来自宪法：
+**Storage**: 不写存档；功能只在开局读取玩家已保存的自定义模式项列表，不新增任何存档字段（宪法第四条自动满足）
 
-- 仅依赖 BaseMod 与 StSLib，不得引入任何第三方库（第一条）。这两个基础 mod 的 jar 既作编译期依赖（经顶层 `libs/` 引用，不入库），也须在**游戏目录** `mods/` 内装好才能被加载器加载（运行期前置，见 Technical Context，由人工一次性完成）。
-- 所有面向玩家的文本必须外置于 `src/main/resources/` 下的 `strings/` 资源目录，中英双语 key 一一对应，禁止在代码中硬编码玩家可见字符串（第二条）。**该禁止项**（代码中出现玩家可见字符串字面量）的验收落点在 T031（游戏内两种语言下逐一目视核对牌面与选项文本）与 T039（人工比对双语 key 集合）；除这两项外，代码层不另设自动化文本扫描，以免把比对工具引入构建流程。
-- 本功能不改动原版卡牌、遗物或事件的内容，但**必须拦截原版的若干判定点**：本体对"不可移除"的实现是 `CardGroup.getPurgeableCards()` 与净化之泉 `FountainOfCurseRemoval` 里硬编码的 cardID 名单，对"不被随机诅咒来源发出"的实现是 `AbstractDungeon.addCurseCards()` 里的同一份名单（依据：本机 `desktop-1.0.jar` V2.3.4 反汇编，结论见 `memory/facts/`，过程见 `memory/log/007`）。这些拦截按宪法第三条集中在 `src/main/java/<modId>/patches/vanilla/`（由 T007 建立），且只判定本牌，不改变原版对其它卡牌的既有处理。mod 自身代码的包根由 T001 确定并写入构建配置（见 Technical Context 的"mod 标识与命名空间"）。
-- mod 卸载后重新加载曾选择该选项的旧存档必须不崩溃（第四条，对应边界情况）。
-- 完成标准为构建通过 + 游戏内实测一次 + 留下可复现步骤（第五条）。
+**Testing**: 不引入自动化测试框架（宪法第一条禁止第三方依赖）；验证方式为游戏内实测 + `quickstart.md` 中的可复现步骤
 
-来自规格：
+**Target Platform**: Slay the Spire 1.x 桌面版 + ModTheSpire 加载器（Windows）
 
-- 选项、诅咒牌、置底行为、抽到即负均由规格条目约束，逐条映射见 Requirement Mapping。
-- 贴图占位：开发期只使用**本地占位图**，不把游戏本体的图片提交进仓库，发布前替换为自制资源。
-- 每场战斗开始时都重新置底（已确认）。
-- 选项必须带效果说明文本，使玩家在勾选前即可看到后果；该结论已写回规格的待定项一节（原 OQ-005，现标记为已关闭），由 T014 落地并在选项界面目视验收。
-- 卸载本 mod 后，该选项不得再出现（`FR-001`）；与"读旧档不崩溃"（`EC-006`）由 T033 同一次实测一并确认。
+**Project Type**: 单机游戏 mod（桌面应用插件）；Maven 单工程 + 三个子模块挂载点（`specs/`、`memory/`、`src/`）
 
-## Architecture and Components
+**Performance Goals**: 无定量指标；置底与入手判定只发生在洗牌 / 抽牌路径，均为牌组规模的常数级操作，不得引入可感知卡顿
 
-组件划分与职责，全部位于本 mod 自己的包命名空间内：
+**Constraints**: 仅允许 BaseMod / StSLib；玩家可见文本必须外置到 `strings/` 中英双语且 key 一一对应；对原版的拦截集中在 `src/main/java/<modId>/patches/vanilla/`；禁用 mod 后读旧档不得崩溃；构建产物为单个 mod jar，jar 与占位图不入库
 
-1. **主入口（初始化器）**
-   实现 BaseMod 的初始化接口与所需订阅者接口：在 `EditCardsSubscriber.receiveEditCards` 中注册卡牌、在 `CustomModeMods`（`receiveAddCustomModeMods`）中注册自定义模式选项、在 `EditStringsSubscriber.receiveEditStrings` 中加载双语文本资源，并在初始化阶段完成 `BaseMod.subscribe(this)`。
-   职责边界：只做注册与订阅，不承载玩法逻辑。
+**Scale/Scope**: 单功能：1 个自定义模式选项、1 张诅咒牌、1 个补丁包、1 套中英双语文本与占位贴图；预计新增类少于 20 个，无外部服务、无数据迁移
 
-2. **自定义模式选项**
-   继承 BaseMod 的自定义模式基类，提供稳定的选项标识（形如 `<modId>:AnthonysWrathOption`）与界面显示文本。该标识是后续一切判断的唯一依据，不得依赖显示名称匹配。
+## Constitution Check
 
-3. **诅咒牌**
-   继承 `CustomCard`，构造参数取 `CardType.CURSE` 与 `CardColor.CURSE`，费用 -2（本体的"不可打出"就是"诅咒类型 + 费用低于 -1"，例外见 `EC-011`），稀有度取参照牌实际使用的 `CardRarity.SPECIAL`（普通诅咒如 `Injury` 用 `CardRarity.CURSE`，参照牌刻意与之区分），目标类型为不指定目标；不实现任何可使用效果；`canUpgrade()` 返回 false（不可升级）；`makeCopy()` 返回新实例。参照牌的类参数与文本出处见 `memory/log/007`。
-   文本通过 `CardCrawlGame.languagePack.getCardStrings(ID)` 取得，禁止在类中硬编码。
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-4. **开局牌组注入**
-   由主入口实现 `PostCreateStartingDeck` 订阅者：判定当前一局是否选中了本选项，若选中则向传出的牌组中加入恰好一张诅咒牌。
+| # | 宪法条款 | 门禁 | 结论与落点 |
+| :--- | :--- | :--- | :--- |
+| 0 | 版本断言（引言） | 游戏补丁版本与 BaseMod / StSLib 版本可只从顶层 `pom.xml` 的 `<properties>` 独立查得 | **PASS**：由首个基础任务把版本键写入顶层构建配置 |
+| 一 | 依赖边界 | 除 BaseMod、StSLib 与 Java 标准库外无第三方依赖 | **PASS**：不引入任何第三方库，测试亦不引入框架 |
+| 二 | 文本与本地化 | 玩家可见文本全部外置于 `src/main/resources/strings/`，中英 key 一一对应 | **PASS**：文本全部走 `strings/`；key 比对步骤见 quickstart |
+| 三 | 原版改动可追溯 | 所有对原版行为的拦截只出现在 `patches/vanilla/` | **PASS**：不可移除与随机诅咒池的拦截集中在本包内，且只判定本牌 |
+| 四 | 存档兼容 | 加载旧存档不得抛异常；新增存档字段必须可缺省 | **PASS**：本功能不写存档；未知选项标识按容错处理（EC-006） |
+| 五 | 完成标准 | 构建通过 + 游戏内实测至少一次 + 留下可复现验证步骤 | **PASS**：构建命令与全部实测场景写入 `quickstart.md` |
+| 六 | 三层归属 | 内容各归其层；验证记录按「流程 / 日志 / 结论」三级归属 | **PASS**：规格在本层、代码与资源在 `src/`、记录在 `memory/log/`；流程写入 `quickstart.md` |
+| 七 | 版本锁定 | 三层以 gitlink 锁定，冻结点指针与各层提交一致 | **PASS**：里程碑任务按 gitlink 断言校验 |
+| 八 | 构建配置归属 | `pom.xml`、依赖版本、工具链与 `AGENTS.md` 只在顶层 | **PASS**：构建配置只落在顶层仓库 |
+| 九 | 提交顺序 | 先提交被改动的层，再由顶层提交推进指针 | **PASS**：任务按 specs → memory → 顶层的顺序安排提交与指针推进 |
 
-5. **牌堆位置控制**
-   负责在每个洗牌结束点把该诅咒牌移动到抽牌堆底部。具体介入点在 T004（时序探针）验证后确定，候选为战斗开始钩子与洗牌相关的底层介入点；无论选哪个，都必须覆盖战斗开始时的首次洗牌与牌堆耗尽后的重洗。介入点若落在原版方法（例如 `CardGroup.shuffle()`）上，补丁类同样放进 `patches/vanilla/`（第 8 项）。
+**Phase 1 后复检**：设计未引入外部接口、未新增依赖、未改变三层归属，全部条款仍为 PASS；无需例外说明。
 
-6. **入手判定**
-   负责在诅咒牌进入手牌时触发判负。至少需要一个覆盖抽牌动作的判定点，并由 T004（时序探针）的第二个验证目标确认是否需要补充覆盖"效果直接取牌"的路径；该结论决定 T021 走哪条备选。
-   判负后不再继续抽牌的机制：判负时置位一个本局内的**已失败标志**（即用于防止重复结算的同一个一次性守卫），后续任何抽牌动作在入口检查到该标志即整段跳过。不额外清空动作队列，也不新增其它干预。判定点若需要拦截原版抽牌动作，补丁类同样放进 `patches/vanilla/`（第 8 项）；若能只用 BaseMod 的 `PostDraw` 等既有钩子实现，则优先用钩子。
+## Project Structure
 
-7. **资源与构建**
-   本功能的骨架落在两处。顶层仓库：`pom.xml`，声明 Java 8 编译目标、对 ModTheSpire / BaseMod / StSLib 的本地依赖引用，并以显式 `sourceDirectory` 指向 `src/main/java`、以 `resources` 指向 `src/main/resources`（两者均位于 `src/` 子模块内，路径相对顶层 `pom.xml`）；以及 **`libs/`**，存放编译期依赖 jar（游戏本体、ModTheSpire、BaseMod、StSLib）。`src/` 子模块：`main/java/` 下的包结构、`main/resources/` 下的中英双语 `strings/` 资源、`main/resources/placeholder/` 下的开发期占位贴图。
-   构建命令一律在顶层目录执行；产物落在顶层 `target/`，该目录已被 `.gitignore` 忽略。依赖 jar 与占位贴图**都不入库**：`.gitignore` 的 `*.jar` 为最终规则（不再对 `libs/*.jar` 开白名单，也不保留 gradle wrapper 的 jar 白名单——本项目用 Maven，该白名单已一并移除），占位图由 `src/` 层自己的 `.gitignore` 忽略（该文件由 T037 在本层建立）。
+### Documentation (this feature)
 
-另需在 jar 根放置加载器要求的 `ModTheSpire.json`（ModTheSpire 靠它识别 mod：`modid`、`sts_version`、`dependencies` 等字段；其中版本值仍以顶层 `pom.xml` 的 `<properties>` 为唯一事实来源，不在此另写一份）。它随构建产出，由 T001 建立骨架、T002 实现入口类时补齐字段，并在 T042 的加载验收中一并确认（T042 的依赖须覆盖源码与资源，见任务表）。
+```text
+specs/001-anthonys-wrath/
+├── plan.md              # 本文件(/speckit-plan 输出)
+├── research.md          # Phase 0 输出:技术决策、未决项与风险兜底
+├── data-model.md        # Phase 1 输出:实体、规则与状态转换
+├── quickstart.md        # Phase 1 输出:可复现、可重跑的验证流程
+├── checklists/
+│   └── requirements.md  # 规格质量清单(/speckit-specify 输出)
+├── spec.md              # 功能规格(/speckit-specify 输出)
+└── tasks.md             # Phase 2 输出(/speckit-tasks 生成,本步骤不创建)
+```
 
-8. **原版判定点拦截（补丁包）**
-   本牌"不可移除"必须与参照牌落在同一批拦截点上：`CardGroup.getPurgeableCards()` 的结果里不含本牌（这一处覆盖商店移除、休息点、遗物与十二个事件的候选列表），以及净化之泉 `FountainOfCurseRemoval` 的批量删除循环跳过本牌；探针（T004）枚举出的其它移除路径由 T007 一并补齐。补丁类集中在 `src/main/java/<modId>/patches/vanilla/`（T007 建立），只判定本牌 cardID，不改变原版对其它卡牌的处理。另把本牌排除出随机诅咒池 `AbstractDungeon.curseCardPool`（本体每次开局/读档重建该池时会收录卡牌库中的所有诅咒牌），优先用 `PostDungeonInitializeSubscriber` 钩子（T009），避免为此新增补丁。
+本项目不对外提供编程接口，故不生成 `contracts/`。
 
-## Data Flow and Interfaces
+### Source Code (repository root)
 
-主要流程与经过的组件：
+```text
+# 顶层仓库:构建配置与三层挂载点
+pom.xml                       # Maven 配置:Java 8;显式 sourceDirectory/resources 指向 src/
+libs/                         # 编译期依赖 jar(游戏本体、ModTheSpire、BaseMod、StSLib;不入库)
+.gitmodules / AGENTS.md / .gitignore
+specs/  memory/  src/         # 三个子模块挂载点
 
-- **选择选项**：玩家在选择界面勾选选项，游戏把该选项标识记录进玩家的自定义模式项列表；本 mod 在界面展示阶段提供选项文本。
-- **开局注入**：新的一局开始、初始牌组生成完成 → 主入口收到 `PostCreateStartingDeck` → 读取玩家的自定义模式项列表 → 若含本选项标识，则向牌组加入一张诅咒牌。此时牌组已固定，诅咒牌随之进入本局的牌库。
-- **每次战斗开始**：战斗开始 → 抽牌堆被填充并洗牌 → 牌堆位置控制组件在该洗牌结束后把诅咒牌移到抽牌堆底部 → 玩家回合开始抽牌，诅咒牌位于最底部。
-- **战斗中途重洗**：抽牌堆耗尽 → 弃牌堆重新洗入抽牌堆 → 牌堆位置控制组件在新顺序确定后再次把诅咒牌移到抽牌堆底部。
-- **抽到该牌**：玩家抽牌 → 入手判定组件识别到该牌进入手牌 → 触发本局失败 → 游戏走本体的失败流程。
-- **以效果直接取牌**：由「搜寻」类效果从抽牌堆或弃牌堆取牌入手 → 必须与上一条走同一判定路径。
-- **未选择选项**：主入口在开局注入阶段判定为未选中，不加入任何卡牌；其余组件在该局中不产生任何干预。
+# src/ 子模块:代码、数据与资源
+src/main/java/<modId>/
+├── <ModEntry>.java           # BaseMod 初始化入口与订阅者注册
+├── options/                  # 自定义模式选项
+├── cards/                    # 诅咒牌「安东尼之怒」
+├── run/                      # 开局注入、洗牌置底、入手判定
+└── patches/vanilla/          # 原版判定点拦截(不可移除、随机诅咒池)
+src/main/resources/
+├── strings/<modId>/          # 中英双语文本(key 一一对应)
+├── placeholder/              # 开发期占位贴图(src/ 层 .gitignore 忽略)
+└── ModTheSpire.json          # 加载器清单(jar 根)
+```
 
-对外接口就是 BaseMod 的订阅者方法签名：`EditCardsSubscriber.receiveEditCards`、`EditStringsSubscriber.receiveEditStrings`、`CustomModeMods`（`receiveAddCustomModeMods`）、`PostCreateStartingDeckSubscriber.receivePostCreateStartingDeck`、`PostDungeonInitializeSubscriber.receivePostDungeonInitialize`，以及由 T004 探针结论决定的位置控制与入手判定钩子（见 Architecture 第 5、6 项）；另有 `patches/vanilla/` 下针对 `CardGroup.getPurgeableCards()` 与 `FountainOfCurseRemoval` 的拦截（见第 8 项）。本 mod 不向其他 mod 暴露编程接口。
-
-## Dependencies
-
-- **运行时依赖**：BaseMod、StSLib（加载器要求玩家已安装，按宪法第一条这是允许集合的全部）。
-- **编译期依赖**：ModTheSpire、BaseMod、StSLib 的 jar；以及游戏本体的桌面版 jar。四者统一放在**顶层** `libs/`，由 `pom.xml` 以本地路径引用；`.gitignore` 的 `*.jar` 规则使其一律不入库。
-- **构建工具**：Maven；编译目标与运行目标均为 Java 8，不使用更高版本的语法与 API。
-- **打包**：产物为单个 mod jar，内含 `strings/` 资源与贴图；BaseMod 与 StSLib 不打入 jar，由加载器提供。
-- **被拒绝的依赖**：任何用于简化事件监听、JSON 解析或测试的第三方库，均因宪法第一条而不予引入。
-
-## Requirement Mapping
-
-- 选项注册与展示（`FR-001`、`FR-011`）：Architecture 第 1、2、7 项；玩家自定义模式项列表是唯一判定依据；本牌还必须不在随机诅咒池内（`EC-010`），由 T009 实现、T032 验证。选项标识不与本体冲突由 T012 在注册环节比对确认；选项的效果说明文本由 T014 落地并在选项界面目视确认（结论见规格中已关闭的待定项）。**卸载后选项不再出现由 T033 覆盖**（与存档兼容同一次实测完成）。验证见 T032、T033。
-- 开局注入（`FR-002`、`FR-003`）：Architecture 第 4 项，Data Flow 的"开局注入"路径；注入点必须落在"清空初始牌组"之后，具体位置由 T004（T-P1）的探针结论确定。验证见 T016（注入早于第一次洗牌的判据取自探针的钩子时序）与 T034（空开局牌组）。
-- 诅咒类别与不可用性（`FR-004`、`FR-005`）：Architecture 第 3 项。验证见 T029。
-- 诅咒牌的名称与描述文本（`FR-013`，对应用户故事 US-001 中"能在牌组查看界面看到该牌"）：Architecture 第 3 项与第 7 项；名称与描述一并外置于双语 `strings/` 资源，不写进类中。验证见 T031。
-- 不可移除与牌面文本（`FR-012`、`FR-013`）：Architecture 第 3 项、第 7 项与第 8 项；本体没有可启用的"不可移除属性"（本机 V2.3.4 反汇编：本体自己也是靠 cardID 名单保护参照牌），实现方式是把本牌加入本体同款拦截点（由 T007 建包并实现）；牌面文本在中英双语资源中直接写明，不使用关键词样式或颜色标记。验证见 T029、T030、T031。
-- 置底行为（`FR-006`、`FR-007`）：Architecture 第 5 项，由 T004（T-P1）确定介入点，由 T025、T026、T035（T-V1）验证。
-- 判负时机（`FR-008`）：Architecture 第 6 项，由 T004（T-P1）确定覆盖范围，由 T027（T-V2）验证；判负后不再接受操作也由 T027 覆盖。
-- 判负表现与记录（`FR-009`）：Architecture 第 6 项，失败走游戏本体流程，由 T038（T-V2）验证。
-- 单次判负（`FR-010`）：Architecture 第 6 项需要一个本局内的一次性守卫；由 T022 实现，T027 覆盖"多副本同时入手只结算一次"的观察。
-- 可观察结果（`SC-001` 至 `SC-005`）：Testing Strategy 的手工检查清单，逐条对应 T025、T026、T027、T032、T031。SC-005 的范围仅限游戏内实测（进入战斗后的牌堆观察、判负结算、牌面与移除界面呈现、未选中时的牌组比对）；**资源文件之间的一致性核对（T039）不在其内**，该条属于资源层的人工检查，不计入「无需阅读代码」的判据。
-- 多次洗牌与空开局牌组（`EC-001`、`EC-002`）：T004（T-P1）需覆盖空开局牌组的钩子顺序与清空时机；T026、T035 覆盖多次洗牌，T016、T034 覆盖空开局牌组。
-- 牌被移除后的行为（`EC-003`）：该牌是否受"变化"类效果影响，以参照牌「铃铛的诅咒」的实际结算为准，本 mod 不自行规定；牌堆位置控制组件在找不到该牌时直接跳过，不产生额外判定。由 T024 实现、T030 实测；**该实测的结论须写回本规格「Assumptions」里「该诅咒牌不可打出、不可消耗」那一条（第 74 行）以及「不可移除的含义与结算完全对齐参照牌」那一条（第 81 行），并把写回记录记入 `memory/log/`**（按锚点定位，不按行号：spec 的上文任何改动都会让行号漂移）。
-- 判负后的操作与结算顺序（`EC-004`）：由 T027（T-V2）确认判负后不再产生可操作结果。
-- 主动放弃本局（`EC-005`）：本 mod 不对放弃流程做任何干预；由 T035 实测。
-- 卸载后加载旧存档（`EC-006`）：主入口在读取自定义模式项列表时必须容忍未知标识；由 T033（T-V4）验证。
-- 同名选项共存（`EC-007`）：设计约束为"所有判断基于选项标识，禁止基于显示名称"；因需第三方 mod 才能复现，不单独安排验收；`FR-001` 的"标识独立于本体选项"由 T012 在注册环节覆盖。
-- 非抽牌取牌（`EC-008`）：Architecture 第 6 项的覆盖范围，由 T004（T-P1）的第二个验证目标确认判定点，T021 实现、T028 实测；两条路都不可行时按 Risks 的兜底处理。
-- 移除界面中的表现（`EC-009`）：Architecture 第 8 项的拦截点，由 T029（T-V6）验证。
-- 随机诅咒来源的排除（`EC-010`）：Architecture 第 8 项；由 T009 实现（优先钩子，不新增补丁），`SC-004` 与 T032 覆盖"未选中时逐张一致"的观察。
-- 蓝蜡烛与消耗类效果的既有规则（`EC-011`）：本 mod 不做干预，也不增加参照牌没有的限制；由 T029（T-V6）以"与参照牌同条件对照"的方式实测。
-
-## Testing Strategy
-
-先验证机制，再写实现；每条验证留下可复现步骤（宪法第五条）。**可复现的验证流程写在本节**；验证过程产生的记录（key 清单、实测操作与观察、探针输出、逐条结果）追加到 `memory/log/`；只有经得起复用、对后续有约束力的结论才升入 `memory/facts/`，且必须带方法与适用范围。三级的判定标准见 `memory/README.md`。
-
-另有两条机制性约定：**改动 `specs/` 下的 spec / plan / tasks 之后，必须复跑文档一致性门禁**（`memory/log/check-artifacts.mjs`，T043 起移到 `memory/tools/`），核对任务编号连续性、依赖完整性、需求承接与引用有效性，并补齐先后序与成环检查（该扩展由 T043 实现，T044 把检查项与豁免名单写进项目说明）——本轮实测证明"覆盖度靠通读判断"会漏（见 `memory/log/004`），而先后序与成环同样会漏（见 `memory/log/006`）。门禁工具本身是项目的一部分，其技能化提案见 T045。
-
-- **T-P1 时序探针（任务 T004；先做，只输出日志）**：构建一个仅含日志输出的探针版本，在游戏内推进到战斗开始、抽牌堆耗尽重洗、以及使用一张「搜寻」类卡牌，打印各介入点的触发顺序与抽牌堆内容。必须回答五个问题：首次洗牌发生在哪个钩子之前或之后；哪个介入点能同时覆盖首次洗牌与重洗；以效果直接取牌时哪个判定点会触发；**并覆盖一次非"牌堆耗尽"触发的洗牌**（由卡牌或遗物把弃牌堆洗回抽牌堆，用于闭合 `EC-001` 的覆盖范围，T026、T035 各测一次该路径）；**并在开启"清空初始牌组"的自定义开局下，确认清空与开局牌组创建的先后顺序**（结论决定注入点挂在清空之前还是之后）；**并枚举本体让参照牌"删不掉"的全部判定点**——`CardGroup.getPurgeableCards()`、净化之泉 `FountainOfCurseRemoval`，以及是否存在不经这两处的移除路径（例如 `beyond/Falling`、`shrines/WeMeetAgain`），同时确认 `PostDungeonInitialize` 钩子是否晚于 `AbstractDungeon.initializeCardPools()`。结论直接决定 Architecture 第 5、6、8 项的实现位置（第 8 项的拦截清单交 T007、T009 使用）。**探针的每次输出与结论记入 `memory/log/`（T004）**；其中只有"可复用且有约束力"的判断才升入 `memory/facts/`。<br>注意：`spec.md` 的「Assumptions」小节把"变化类效果如何处理该牌"写成以参照牌实测为准的假设（「该诅咒牌不可打出、不可消耗」与「不可移除的含义与结算完全对齐参照牌」两条，按锚点定位），探针须一并测出参照牌「铃铛的诅咒」在变化与移除两类操作下的实际表现，并由 T030 把结论写回规格（见 Requirement Mapping 的 `EC-003` 一条）。
-- **T-V1 置底验证（任务 T025、T026、T035；对应 `SC-001`、`SC-002`、`EC-001`）**：进入战斗后检查抽牌堆顺序；在同一场战斗中触发至少两次重洗（含一次非"牌堆耗尽"触发），每次重洗后重复检查。查看抽牌堆顺序的手段：**原版遗物「冰冻之眼」优先**（查看抽牌堆时按顺序显示牌面），开发者控制台为书面备选；若「冰冻之眼」不可用则改用控制台并记录原因。**记录写入 T025、T026**。
-- **T-V2 判负验证（任务 T027、T028、T038；对应 `SC-003`、`FR-008`、`FR-009`）**：让该牌被自然抽到，确认失败在同一次抽牌后立即发生、无额外操作窗口、结算界面显示失败；再用「搜寻」类效果主动取牌，确认同样判负；并在多副本情形下确认同一时刻抽入多张只结算一次失败。**记录写入 T027、T038**。
-- **T-V3 未选中验证（任务 T032；对应 `FR-011`、`SC-004`、`EC-010`）**：不选择该选项开一局，逐张比对本局牌组与未安装本 mod 时的牌组；再确认本牌不在随机诅咒池内（检查 `AbstractDungeon.curseCardPool`，或用控制台/事件反复产诅咒观察），标准模式同样不出现本牌。**记录写入 T032**。
-- **T-V4 卸载验证（任务 T033；对应 `EC-006`）**：禁用 mod 后加载一个曾选择过该选项的存档，确认不崩溃。**记录写入 T033**。
-- **T-V5 空开局牌组（任务 T034；对应 `EC-002`）**：把初始牌组设为空并选择该选项，确认诅咒牌仍被加入、加入时点早于第一次洗牌，且第一次洗牌后它位于最底部。**记录写入 T034**。
-- **回归要求**：每完成一条实现，重跑 T-V1 至 T-V3（即 T025、T026、T027、T032），确认没有互相破坏。
-- **T-V6 不可移除与牌面文本验证（任务 T029、T031、T030；对应 `FR-012`、`FR-013`、`EC-003`、`EC-009`、`EC-011`）**：进入商店移除服务与休息点移除界面，确认该牌不在可移除目标中；在净化之泉（批量清除全部诅咒）事件中确认本牌不被删除；用一次"变化"类效果作用于它，确认其表现与参照牌「铃铛的诅咒」一致；"不可打出、不可被主动消耗"改用与参照牌同条件对照的方式实测（含持「蓝蜡烛」的一次对照，理由见 `EC-011`）；对照所需的「蓝蜡烛」与开发者控制台，其可用性由 T029 在开工前先行确认（不可用则改用可复现的替代手段并记录），该项与 T-V1 的观察手段同源；检查牌面描述是否与参照牌同样以纯文本写明无法移除，中英两种语言各看一次，并比对英文措辞与参照牌英文文本。**记录写入 T029、T030、T031**。
-- **构建与资源验收（任务 T039、T042；对应宪法第二条、第五条）**：构建命令成功后，用 `jar tf` 确认产物内含 `strings/` 双语资源与贴图，命名为与放置位置符合记录，并能被 ModTheSpire 正常加载（游戏可启动、加载日志无异常）；中英双语资源文件的 key 集合由**人工比对**确认一一对应（无缺、无多），两份 key 清单与比对结果写入 `memory/log/`（T039）。不引入自动化测试框架，也不把任何比对工具纳入构建流程。<br>范围说明：T039 的人工比对需要打开资源文件，因此 `SC-005` 的"无需阅读代码"只适用于 T-V1 至 T-V6 的游戏内实测部分，不含资源 key 比对。
-- **不做的测试**：本项目不引入自动化测试框架；探针代码在功能完成后移除（T036），不随发布版本保留。
-
-## Risks and Fallbacks
-
-- **风险：置底介入点不覆盖全部重洗路径**（最可能出问题的一项）。
-  兜底：把"在抽牌动作发生前校正抽牌堆底部"作为第二道防线（T019）；两道防线可同时存在，重复校正不产生副作用，由 T026、T035 覆盖。
-- **风险：找不到非抽牌取牌的可靠判定点**，导致以效果取牌时不判负。
-  兜底：若底层介入点不可用，则改为在牌位于手牌中的时机做校验。若两条路都不可行、以致 EC-008 无法在不放宽规格的前提下满足，**不得缩减覆盖范围**，必须回到 `/speckit-clarify` 重新界定 EC-008 之后再继续实现。
-- **风险：判负调用方式不正确**，误走"放弃本局"流程或不计入失败记录。
-  兜底：以游戏本体的失败流程为准，在 T-V2 中（该验证写入 T027、T038）同时核对结算界面与游戏记录；不使用可能被解释为放弃的调用。
-- **风险：开局注入时机晚于牌组固定**，导致该牌不进入本局牌库。
-  兜底：T004（T-P1）的探针会直接暴露这一点，届时改用更早的介入点或在首场战斗前补齐注入；由 T016、T034 验收。
-- **风险：诅咒牌贴图引用**依赖原版资源或自制资源。
-  兜底：开发期只在本地引用占位贴图（放在 `src/main/resources/placeholder/`，由 `src/` 层自己的 `.gitignore` 忽略），**不把游戏本体图片提交进仓库**；发布前替换为自制资源（两个尺寸），由 T037 验收。此举与宪法附录中"有意未收录仓库纪律"的取舍一致，属临时开发手段而非长期约定。
-- **风险：不可移除的呈现方式与参照牌不一致**。杀戮尖塔 1 没有"永恒"词条，该性质完全靠牌面文本表达（本机 V2.3.4 反汇编确认，见 `memory/log/007`），措辞偏离参照牌会让玩家看不出它删不掉。
-  兜底：牌面文本与参照牌「铃铛的诅咒」对齐（英文 `Unplayable. NL Cannot be removed from your deck.`，中文 ` 不能被打出 。 NL 不能从牌组中移除。`），中英各自照搬游戏内既有用词；T-V6（T029、T030、T031）会在两种语言下各看一次，措辞不对会直接暴露。
-- **风险：移除入口枚举不全**，除商店移除、休息点、净化之泉外仍有未发现的路径能把本牌删掉。
-  兜底：以 T004 的枚举清单为准、T007 逐入口补齐；每条入口的处理方式记入 `memory/log/`；必要时加一道 `CardGroup.removeCard` 守卫作为第二防线（须先确认不干扰"变化"的 remove+add 复合动作，见 `EC-003`）。
-- **风险：本牌被随机诅咒来源发出**（本体每次开局/读档重建诅咒池时会收录卡牌库中所有诅咒牌，`EC-010`）。
-  兜底：T009 在 `PostDungeonInitialize` 钩子里把本牌移出 `AbstractDungeon.curseCardPool`；若钩子时序不合用则改为补丁；由 T032 验证。
-- **风险：自定义模式项在读取存档后未恢复**，导致读档后选项判定失效。
-  兜底：所有判定都以存档恢复后的玩家自定义模式项列表为准；T-V4（该验证写入 T033）一并验证读档路径。
-- **风险：Maven 对游戏本体与基础 mod 的本地依赖引用配置繁琐**，可能拖慢首个可运行版本。
-  兜底：先用最小可编译配置打通构建（T001），该配置即须显式声明 `sourceDirectory` 与 `resources` 指向 `src/` 子模块；依赖引用随后在 T002 补齐，不等到打包阶段。
+**Structure Decision**: 沿用既有三层结构——构建配置在顶层、代码与资源在 `src/` 子模块、规格在该功能目录；本功能不新增顶层目录，只在 `src/` 内建立包结构。具体 mod 标识与 Java 包名由首个基础任务确定并写入顶层构建配置，全项目以该配置为唯一命名依据。
