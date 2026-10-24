@@ -38,7 +38,11 @@
 
 探针输出与结论记入 `memory/log/`；未得出结论前，不得进入对应实现（置底、入手判定、不可移除拦截、诅咒池排除）。
 
-**探针版本（开发期实现，T035 移除）**：代码位于 `src/main/java/<modId>/probe/`（`TimingProbe` 自注册、`ProbePatches` 只读观测、`AwProbeCommand` 控制台命令、`ProbeLog` 双写日志）。日志同时输出到 MTS 控制台与 `%USERPROFILE%\awprobe.log`；控制台（BaseMod Dev Console，反引号键打开）命令：
+**探针版本（开发期实现，T035 移除）**：代码位于 `src/main/java/<modId>/probe/`（`TimingProbe` 自注册、`ProbePatches` 只读观测、`AwProbeCommand` 控制台命令、`ProbeLog` 双写日志）。日志同时输出到 MTS 控制台与文件；文件默认 `%USERPROFILE%\awprobe.log`，可用下列两种方式改到工作区（日志首行会打印实际路径与来源，`ProbeLog.logPath()` 也会把路径写进 `hook.PostInitialize`）：
+- `%USERPROFILE%\awprobe.logpath`：文件内写一行**绝对路径**（支持 `#` 注释与 UTF-8/ANSI，缺失或不可写时自动回退默认位置）；
+- 环境变量 `AWPROBE_LOG`：写绝对路径（优先级高于指针文件；需重启 Steam 让新环境变量生效）。
+
+推荐指向仓库根 `awprobe.log`（`.gitignore` 的 `*.log` 规则会忽略它），这样游戏退出后可直接读取、无需手工复制。控制台（BaseMod Dev Console，反引号键打开）命令：
 
 ```text
 awprobe info                      局面 / 牌堆 / customMods / curseCardPool
@@ -65,7 +69,7 @@ awprobe shuffledeck               直接调 player.drawPile.shuffle()（无参�
 7. **R-006 存活实验**：PowerShell 执行 `New-Item -ItemType File -Path "$env:USERPROFILE\awprobe.inject" -Force`，然后开一局 Draft（新档）→ 日志应出现 `probe.inject | marker=AscendersBane`；看 `StartGame` / `PostDungeonInitialize` / 首战 `preBattlePrep` 的 `masterDeck` 里标记牌是否仍在（哨兵文件用后自动删除，每次实验前重建）；
 8. **读档路径**：任一局打到中途 → 存档退出 → 继续 → 观察 `initializeCardPools` 触发而 `PostDungeonInitialize` 不触发（R-007 证据；本牌注册后 T027 再补池内复测）。
 
-跑完后把 `awprobe.log` 交回，结论回写 `research.md` §R-004～§R-008。
+跑完后把日志文件交回（若已把日志指到工作区，直接告知路径即可）；结论回写 `research.md` §R-004～§R-008。
 
 > 2026-10-24 两轮采集均已完成（`memory/log/018`、`memory/log/019`）：R-004～R-007 已定稿；R-008 的候选列表排除、商店移除链路与变化行为有实测，净化之泉 / 休息点路径留到实现后的 QS-11。后续回归按 §4 的 QS 清单执行。
 
