@@ -28,7 +28,7 @@
 
 **⚠️ CRITICAL**: 本阶段未完成，任何用户故事都不得进入实现。
 
-- [ ] T004 **前置（一次性人工准备）**：ModTheSpire 加载器与 BaseMod、StSLib 已可用（Steam 创意工坊订阅或手动放入游戏目录 `mods/`），且 ModTheSpire 启动日志的 Mod list 中 `basemod` 与 `stslib` 同时出现、BaseMod 完成初始化；安装证据（订阅清单或启动器日志摘录）记入 `memory/log/`，作为本任务可被执行的判据。编写并运行游戏内时序探针 `src/main/java/<modId>/probe/TimingProbe.java`（仅日志输出）：回答 research.md R-004～R-008 与 quickstart §3 的六个问题——首次洗牌与候选钩子的先后、能覆盖首次洗牌与重洗的置底介入点、效果直接取牌与抽牌的判定点是否同一、清空初始牌组与开局牌组创建的先后、参照牌「铃铛的诅咒」在变化 / 移除下的实际表现、`PostDungeonInitialize` 是否晚于 `AbstractCardPools` 初始化；并枚举本体让参照牌「删不掉」的全部判定点，回写 research.md §R-008；探针输出与结论追加到 `memory/log/`（2026-10-24：探针代码已就位 `src/main/java/anthonyswrath/probe/`，含 TimingProbe / AwProbeCommand / ProbePatches / ProbeLog，JDK8 `javac` 编译通过；待用户运行采集数据，见 `memory/log/015`）
+- [ ] T004 **前置（一次性人工准备）**：ModTheSpire 加载器与 BaseMod、StSLib 已可用（Steam 创意工坊订阅或手动放入游戏目录 `mods/`），且 ModTheSpire 启动日志的 Mod list 中 `basemod` 与 `stslib` 同时出现、BaseMod 完成初始化；安装证据（订阅清单或启动器日志摘录）记入 `memory/log/`，作为本任务可被执行的判据。编写并运行游戏内时序探针 `src/main/java/<modId>/probe/TimingProbe.java`（仅日志输出）：回答 research.md R-004～R-008 与 quickstart §3 的六个问题——首次洗牌与候选钩子的先后、能覆盖首次洗牌与重洗的置底介入点、效果直接取牌与抽牌的判定点是否同一、「轮抽（Draft）」等改写牌组选项与开局牌组创建 / 填充的先后、参照牌「铃铛的诅咒」在变化 / 移除下的实际表现、`PostDungeonInitialize` 是否晚于 `AbstractCardPools` 初始化；并枚举本体让参照牌「删不掉」的全部判定点，回写 research.md §R-008；探针输出与结论追加到 `memory/log/`（2026-10-24：探针代码已就位 `src/main/java/anthonyswrath/probe/`，含 TimingProbe / AwProbeCommand / ProbePatches / ProbeLog，JDK8 `javac` 编译通过；待用户运行采集数据，见 `memory/log/015`）
 - [ ] T005 [P] 建立双语文本资源骨架 `src/main/resources/strings/<modId>/`：中英 key 一一对应，格式按 BaseMod 实际加载规则在依赖 jar 就绪后核对；本任务只建空骨架与命名约定
 - [ ] T006 [P] 建立 `src/main/java/<modId>/patches/vanilla/` 包骨架与命名约定，供 US5 逐条实现；不可移除判定点清单由 T004 的枚举结论直接回写 `research.md` §R-008，本任务不重复承接该回写
 
@@ -38,7 +38,7 @@
 
 ## Phase 3: User Story 1 - 选择选项并在开局牌组中获得诅咒牌 (Priority: P1) 🎯 MVP
 
-**Goal**: 玩家在自定义模式中可见并勾选本选项；开局牌组获得恰好一张同名诅咒牌（含空开局牌组）。
+**Goal**: 玩家在自定义模式中可见并勾选本选项；开局牌组获得恰好一张同名诅咒牌（含 Draft 等改写后的开局牌组）。
 
 **Independent Test**: 在自定义模式勾选本选项开一局，打开牌组查看界面核对（quickstart.md QS-01 / QS-02 / QS-08）。
 
@@ -49,10 +49,10 @@
 - [ ] T009 [P] [US1] 在双语资源写入选项显示名「安东尼之怒」与勾选前可见的效果说明文本（`FR-014`），路径 `src/main/resources/strings/<modId>/`；并比对本体负面选项的前缀规则，确认「负面：」前缀由界面槽位提供还是需写入文本、不得重复，结论记入 `memory/log/`
 - [ ] T010 [P] [US1] 实现诅咒牌类 `src/main/java/<modId>/cards/AnthonysWrathCurse.java`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2、`CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例（`FR-004`、`FR-005`）
 - [ ] T011 [US1] 在 `EditCardsSubscriber.receiveEditCards` 中注册诅咒牌并确认游戏将其识别为诅咒（`FR-004`），路径 `src/main/java/<modId>/<ModEntry>.java`
-- [ ] T012 [US1] 实现开局注入 `src/main/java/<modId>/run/StartDeckInjector.java`：实现 `PostCreateStartingDeckSubscriber`，基于 `optionId` 判定本局是否选中，选中则加入恰好一张；注入点在牌组创建之后、首次洗牌之前，具体先后按 T004 结论执行（`FR-002`、`FR-003`；覆盖 `EC-002` 空开局牌组）
+- [ ] T012 [US1] 实现开局注入 `src/main/java/<modId>/run/StartDeckInjector.java`：实现 `PostCreateStartingDeckSubscriber`，基于 `optionId` 判定本局是否选中，选中则加入恰好一张；注入点在牌组创建之后、首次洗牌之前，具体先后按 T004 结论执行（`FR-002`、`FR-003`；覆盖 `EC-002`：Draft 等改写后的开局牌组）
 - [ ] T013 [P] [US1] 在双语资源写入诅咒牌名称与描述初版（名称：中文「安东尼之怒」/ 英文 `Anthony's Wrath`），路径 `src/main/resources/strings/<modId>/`；描述定稿由 T033 按参照牌措辞覆盖完成
 - [ ] T014 [US1] 选项标识容错（路线 a）：从存档恢复后的自定义模式项列表读取时忽略未知标识，保证本 mod 加载时对其它未知项健壮；EC-006 的「本 mod 未加载」场景由本体 / BaseMod 负责、QS-14 只作验证（实测崩溃则回 `/speckit-clarify`），路径 `src/main/java/<modId>/options/`
-- [ ] T015 [US1] 实测并记录 US1：选项可见 / 显示名 / 效果说明（QS-01，`FR-014`）、开局牌组恰好一张（QS-02）、空开局牌组注入（QS-08，仅验加入与时机）、未加载本 mod 后读档不崩溃（QS-14）；结果追加到 `memory/log/`
+- [ ] T015 [US1] 实测并记录 US1：选项可见 / 显示名 / 效果说明（QS-01，`FR-014`）、开局牌组恰好一张（QS-02）、改写开局牌组注入（QS-08，Draft 场景，仅验加入与时机）、未加载本 mod 后读档不崩溃（QS-14）；结果追加到 `memory/log/`
 
 **Checkpoint**: 用户故事 1 可独立验证——选项可见、选中后牌组含牌、卸载容错。
 
@@ -70,7 +70,7 @@
 - [ ] T017 [US2] 在入口类接入该逻辑，覆盖战斗开始首次洗牌、抽牌堆耗尽重洗与卡牌 / 遗物触发的非耗尽重洗（`FR-006`、`EC-001`）
 - [ ] T018 [US2] 处理多副本：全部副本成组置于底部且相对顺序不变（`FR-007`），并在找不到该牌时直接跳过、不做额外判定（`EC-003`）
 - [ ] T019 [US2] 若介入点落在原版方法上，则把对应补丁放入 `src/main/java/<modId>/patches/vanilla/`，只判定本牌 cardID
-- [ ] T020 [US2] 实测并记录 US2：首次洗牌置底（QS-03，含空开局牌组）、两次以上重洗（含非耗尽，QS-04）、多副本成组（QS-05）、第二场战斗重新置底（QS-17），覆盖 `SC-001`、`SC-002`；结果追加到 `memory/log/`
+- [ ] T020 [US2] 实测并记录 US2：首次洗牌置底（QS-03，含 Draft 空开局牌组）、两次以上重洗（含非耗尽，QS-04）、多副本成组（QS-05）、第二场战斗重新置底（QS-17），覆盖 `SC-001`、`SC-002`；结果追加到 `memory/log/`
 
 **Checkpoint**: 用户故事 2 可独立验证——三条洗牌路径后该牌均在底部。
 
