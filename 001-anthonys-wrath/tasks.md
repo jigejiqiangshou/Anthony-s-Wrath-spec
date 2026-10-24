@@ -88,13 +88,16 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] 实现入手判定 `src/main/java/<modId>/run/DefeatOnDraw.java`：在取得动作完成时立即触发本局失败，走游戏本体失败流程（`FR-008`、`FR-009`）
-- [ ] T022 [US3] 覆盖「效果直接取牌」路径（`EC-008`）：按 R-005 实测实现两个判定点（`CardGroup.addToHand` 与目标为手牌的 `CardGroup.addToTop`）；抽牌堆检索走后者、弃牌堆取牌（Meditate）走前者，两判定点已覆盖全部实测通道（`memory/facts/f013`）
-- [ ] T023 [US3] 加入本局一次性守卫与终局短路：失败只结算一次（`FR-010`），判负后后续抽牌在入口整段跳过、不接受可操作结果（`EC-004`）
-- [ ] T024 [US3] 在入口类接入判定组件；若判定点需拦截原版抽牌动作，补丁放入 `patches/vanilla/`，否则优先使用 BaseMod 既有钩子
-- [ ] T025 [US3] 实测并记录 US3：自然抽到即负（QS-06，`SC-003`）、搜寻取牌判负（QS-07）、多副本只结算一次与终局短路（QS-09）、失败记录（QS-15）、主动放弃不触发特判（QS-16，`EC-005`）；结果追加到 `memory/log/`
+> 2026-10-24 实现批次：T021～T024 已完成并通过 JDK8 `javac` 全量编译、离线 MTS 补丁目标自检 22/22 与一次性守卫离线测试 8/8（`memory/log/027`）；**T025 游戏内实测待用户执行**（步骤见 `quickstart.md` §4 的 2026-10-24 US3 段）。实现要点：判负落点复用本体失败流程——按 `AbstractPlayer.damage` 字节码的死亡分支（V2.3.4 偏移 1102~1136）执行 `isDead=true` → `AbstractDungeon.deathScreen = new DeathScreen(getMonsters())` → `currentHealth=0` → `loseBlock()`，不调用 `damage()`（否则蜥蜴尾 / 妖精药水等复活资源会拦下判负，违反 FR-008）；两个入手判定点落 `patches/vanilla/CardGroupHandEntryPatch`（`addToHand` postfix + 目标为手牌的 `addToTop` postfix，R-005 / f013）；一次性守卫 `RunState.tryMarkDefeated()`，终局短路为 `patches/vanilla/AbstractPlayerDrawPatch`（`draw(int)` prefix 在判负后整段跳过，EC-004）；`StartGame` 订阅只负责每局起点重置运行期标志（T027 将在此钩子追加诅咒池排除）。
 
-**Checkpoint**: 用户故事 3 可独立验证——抽到即负、只结算一次、失败入记录。
+- [x] T021 [US3] 实现入手判定 `src/main/java/<modId>/run/DefeatOnDraw.java`：在取得动作完成时立即触发本局失败，走游戏本体失败流程（`FR-008`、`FR-009`）（2026-10-24 完成：`DefeatOnDraw.onCurseEnteredHand(AbstractCard)` 只判定本牌 cardID；`RunState.tryMarkDefeated()` 置一次性守卫后，按本体 `AbstractPlayer.damage` 的死亡分支执行 `player.isDead=true` → `new DeathScreen(AbstractDungeon.getMonsters())` → `currentHealth=0` → `loseBlock()`；`DeathScreen` 构造器承担 screen=DEATH、角色失败统计、失败 metrics、存档处理与返回主菜单按钮，FR-009 的可见失败结算与失败记录均走本体流程。**否决** `player.damage(...)`：同一方法的复活分支（Lizard Tail / Fairy Potion / Mark of the Bloom，偏移 960~1101）会把致命伤变成回复，判负将不成立。判负落点与选择理由见 `research.md` §R-005 Implemented 与 `memory/log/027`）
+- [x] T022 [US3] 覆盖「效果直接取牌」路径（`EC-008`）：按 R-005 实测实现两个判定点（`CardGroup.addToHand` 与目标为手牌的 `CardGroup.addToTop`）；抽牌堆检索走后者、弃牌堆取牌（Meditate）走前者，两判定点已覆盖全部实测通道（`memory/facts/f013`）（2026-10-24 完成：`patches/vanilla/CardGroupHandEntryPatch` 两个 postfix 静态内部类；`addToHand` 覆盖普通抽牌 / 临时牌 / 弃牌堆取牌，`addToTop` 仅在 `__instance == player.hand` 时判定，覆盖抽牌堆检索与 Retain；两处均只把命中的本牌交给 `DefeatOnDraw`，其它卡牌行为不变。离线自检确认两个补丁精确命中目标方法）
+- [x] T023 [US3] 加入本局一次性守卫与终局短路：失败只结算一次（`FR-010`），判负后后续抽牌在入口整段跳过、不接受可操作结果（`EC-004`）（2026-10-24 完成：`RunState` 新增 `defeated` / `defeatGuard` 与 `isDefeated()` / `tryMarkDefeated()` / `resetDefeatState()`；多副本同时入手时第二次判定直接返回，只结算一次；`patches/vanilla/AbstractPlayerDrawPatch` 以 `SpireReturn` prefix 在 `isDefeated()` 时跳过 `AbstractPlayer.draw(int)` 整个方法体（后续抽牌入口级短路）；判负后本体 `screen=DEATH` 只更新 `DeathScreen`、不再更新战斗与操作，玩家无法再操作。守卫语义离线测试 8/8 通过）
+- [x] T024 [US3] 在入口类接入判定组件；若判定点需拦截原版抽牌动作，补丁放入 `patches/vanilla/`，否则优先使用 BaseMod 既有钩子（2026-10-24 完成：判定点与短路均为原版方法拦截，按约定放 `patches/vanilla/`（`CardGroupHandEntryPatch` / `AbstractPlayerDrawPatch`），由 ModTheSpire 加载时自动应用，入口类不额外注册；入口类唯一的 US3 变更是 `implements StartGameSubscriber` 并在 `receiveStartGame()` 调 `RunState.resetDefeatState()`——新档与读档都触发该钩子（R-007），供 T027 在此追加诅咒池排除；javadoc 已写明该分工）
+- [ ] T025 [US3] 实测并记录 US3：自然抽到即负（QS-06，`SC-003`）、搜寻取牌判负（QS-07）、多副本只结算一次与终局短路（QS-09）、失败记录（QS-15）、主动放弃不触发特判（QS-16，`EC-005`）；结果追加到 `memory/log/`（2026-10-24：**待用户实测**，jar 已由用户重建并放入 `mods/`；步骤与预期见 `quickstart.md` §4 的 2026-10-24 US3 段，证据判读用 `awprobe.log` 新增的 `patch.deathScreen.*` 两条日志）
+
+
+**Checkpoint**: 用户故事 3 可独立验证——抽到即负、只结算一次、失败入记录。（2026-10-24：T021~T024 实现完成，`memory/log/027`；T025 待用户实测，通过后本 Checkpoint 才算成立）
 
 ---
 

@@ -100,6 +100,21 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >
 > **遗留观察**：QS-01 的屏幕中文文案仍无截图/记录，留 T041 或下会话顺手复核；#159/#160 净化之泉把本牌从 masterDeck 删除属 US5（T029-T031）未实现的预期缺口，不是 US2 回归。
 
+> 2026-10-24 US3 实现完成（T021~T024：`run/DefeatOnDraw` + `patches/vanilla/CardGroupHandEntryPatch` + `AbstractPlayerDrawPatch` + `StartGame` 重置；离线自检见 `memory/log/027`），**T025 待实测**。本轮 jar 由用户 21:43 重建并放入 `mods/`（已核对与 `target/anthonyswrath.jar` 同哈希），但**该 jar 不含 US3 代码**——执行本段前必须用普通终端重新 `mvn package` 并覆盖 `mods/anthonyswrath.jar`，并删除旧 `awprobe.log`。
+>
+> **T025 步骤**（全部使用「观者 + 本选项」新档；若用其它角色亦可，步骤不变）
+>
+> 1. **QS-06 自然抽到即负**：进第一场战斗，先用 `awprobe drawpile`（或「冰冻之眼」）确认本牌位于抽牌堆索引 0（底部）；正常推进回合、不断抽牌直到本牌入手。预期：本牌进入手牌瞬间播放死亡动画并进入失败结算（显示本局失败），无需任何额外操作。证据：`awprobe.log` 中 `patch.addToHand … card=anthonyswrath:AnthonysWrath` 之后出现**恰好一次** `patch.deathScreen.before` / `patch.deathScreen.after` 成对记录。
+> 2. **QS-07 搜寻取牌**：新开一局（或读档），用「秘密技法（Secret Technique）」类**抽牌堆**检索牌把本牌直接取入手牌；若牌组有「冥想（Meditate）」，也可先按 §4 的 Scry 步骤把本牌从抽牌堆放入弃牌堆，再用冥想从弃牌堆取回。预期：取牌完成瞬间同样判负。证据：抽牌堆检索路径出现 `patch.addToTop(hand) … card=anthonyswrath:AnthonysWrath`、弃牌堆取牌路径出现 `patch.addToHand … card=anthonyswrath:AnthonysWrath`，其后同样接一次 `patch.deathScreen.*`。
+> 3. **QS-09 多副本只结算一次 + 终局短路**：进战斗后用 `awprobe addcard anthonyswrath:AnthonysWrath` 加入第二张副本（或用复制类效果），先抽空抽牌堆触发一次重洗（此时两张副本应在底部），再用一次抽多张的效果（如「祭品」「战斗专注」）或自然抽牌让副本入手。预期：同一瞬间只结算一次失败；`patch.deathScreen.*` 在整份日志中**只出现一次**；判负后 `awprobe.log` 不再出现新的 `patch.draw(int).before` 行（本 mod 的 draw 入口已短路），死亡结算界面不接受任何操作。
+> 4. **QS-15 失败记录**：在失败结算界面点「返回主菜单」，到「角色统计 / 游戏记录」确认本局计为失败（loss 计数 +1），游戏日志含 defeat metrics。
+> 5. **QS-16 主动放弃不触发特判**：新开一局，进战斗后不抽到本牌即「保存并退出」/放弃本局。预期：按本体流程处理；该流程中不出现由本牌触发的 `patch.deathScreen.*`（日志中 `deathScreen` 计数保持 0）。
+> 6. 顺手复核 QS-01 中文选项屏幕文案（历次遗留项）。
+>
+> **判负证据线**：`patch.deathScreen.before` 的 `isDead=… hp=…` 与 `patch.deathScreen.after` 的 `screen=DEATH` 成对出现即判负落点生效；本牌入手后没有这两行则落点未生效（回传日志排查）。探针的 `patch.addToHand` 行可能早于本 mod 的判负后处理，判读以 `patch.deathScreen.*` 与后续是否还有 `patch.draw(int).before` 为准。
+>
+> **测试可行域变化（US3 之后）**：探针版「抽到本牌不判负」的前提已消失；复现 QS-04 的「抽牌堆耗尽重洗」必须先按上文 T041 步骤用 Scry 把本牌从抽牌堆放入弃牌堆，否则抽空抽牌堆会先抽到本牌并判负。
+
 | 编号 | 对应需求 | 操作 | 预期 |
 | :--- | :--- | :--- | :--- |
 | QS-01 | FR-001、FR-014 | 进入自定义模式选项列表 | 可见「负面：安东尼之怒」；勾选前即可看到效果说明文本 |

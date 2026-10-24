@@ -82,7 +82,7 @@ src/main/java/<modId>/
 ├── options/                  # 自定义模式选项
 ├── cards/                    # 诅咒牌「安东尼之怒」
 ├── run/                      # 开局注入、洗牌置底、入手判定
-└── patches/vanilla/          # 原版判定点拦截(洗牌置底、不可移除、随机诅咒池)
+└── patches/vanilla/          # 原版判定点拦截(洗牌置底、入手判定与终局短路、不可移除、随机诅咒池)
 src/main/resources/
 ├── strings/<modId>/          # 中英双语文本(key 一一对应)
 ├── placeholder/              # 开发期占位贴图(src/ 层 .gitignore 忽略)

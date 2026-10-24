@@ -55,8 +55,14 @@
   - **抽牌堆**「搜寻」取牌 2 次只走 `removeCard(drawPile) <- SkillFromDeckToHandAction.update:54/:78` + `addToTop(hand) <- ...:55/:79`，**完全绕过 addToHand、PostDraw 与 draw(int)**；
   - **弃牌堆→手中**（第二轮，Meditate）走 `addToHand <- MeditateAction.update:84` 紧接着 `removeCard(discardPile) <- MeditateAction.update:86` ⇒ 弃牌堆取牌走 **addToHand**，与抽牌堆检索不同；
   - Retain 回手 10 次走 `addToTop(hand) <- RestoreRetainedCardsAction.update:26`；判定点必须按 cardID 过滤，避免把普通回手当成本牌入手。
-- **Remaining（留待实现后验证）**: 判负落点（`AbstractDungeon.fail` / 结算界面）与「只结算一次」守卫属 QS-06 / QS-09；`addToBottom(hand)` 通道两轮均未触发（探针已布观测补丁，保留以防第三方效果）。
-- **Alternatives considered**: 只挂 `PostDrawSubscriber`（否决：取牌不触发）；只挂 `addToHand`（否决：抽牌堆检索绕过）；回合结束扫描手牌（否决：不满足「同一瞬间结束」）。
+- **Remaining（留待实现后验证）**: 「只结算一次」守卫的端到端表现属 QS-06 / QS-09；`addToBottom(hand)` 通道两轮均未触发（探针已布观测补丁，保留以防第三方效果）。
+- **Implemented（2026-10-24，T021~T024 回写）**:
+  - **入手判定**: `patches/vanilla/CardGroupHandEntryPatch` 两个 postfix——`CardGroup.addToHand(AbstractCard)` 与目标组为 `player.hand` 的 `CardGroup.addToTop(AbstractCard)`；两处只把命中本牌 cardID 的调用交给 `run/DefeatOnDraw.onCurseEnteredHand(AbstractCard)`，其它卡牌与其它目标组不受影响。
+  - **判负落点（原 Remaining 中的问题，字节码复核 V2.3.4）**: 正文的死亡分支在 `AbstractPlayer.damage` 偏移 **1102~1136**——`isDead=true` → `AbstractDungeon.deathScreen = new DeathScreen(AbstractDungeon.getMonsters())` → `currentHealth=0` → `loseBlock()`；`DeathScreen` 构造器依次完成 `screen=DEATH`、`resetScoreChecks`、`is_victory=false`、`clearEvent`、`incrementDeath`、`submitDefeatMetrics`、存档处理与返回主菜单按钮，而 `AbstractDungeon.update` 在 `screen==DEATH` 时只调用 `DeathScreen.update()` ⇒ 战斗与玩家操作整体冻结。`run/DefeatOnDraw` 直接复刻该分支（FR-009 的可见失败结算与失败记录全走本体）。**否决** `player.damage(...)`：同一方法的复活分支（Lizard Tail / Fairy Potion / Mark of the Bloom，偏移 960~1101）会把致命伤变成回复、使判负不成立（违反 FR-008），且会引入受伤类遗物/能力副作用。
+  - **一次性守卫与终局短路**: `RunState.defeated` / `defeatGuard` + `tryMarkDefeated()`（首次置位，之后直接拒绝）；`patches/vanilla/AbstractPlayerDrawPatch` 用 `SpirePrefixPatch` 返回 `SpireReturn.Return()` 跳过整个 `AbstractPlayer.draw(int)`（EC-004 的入口级短路）。MTS 侧行为已复核：`ParameterPatchInfo.doPatch` 在目标返回 void 时生成 `if (opt.isPresent()) return;`（ModTheSpire.jar 字节码）。`StartGameSubscriber` 只负责每局起点 `RunState.resetDefeatState()`（新档与读档都触发，§R-007）。
+  - **离线自检**: JDK8 `javac` 全量编译 exit 0；离线复刻 MTS 目标解析 **22/22**（新增 3 条补丁 + `DeathScreen` 构造器探针）；一次性守卫语义测试 **8/8**。证据 `memory/log/027`。
+  - **Remaining（T025）**: QS-06 / QS-07 / QS-09 / QS-15 / QS-16 游戏内实测。探针新增 `patch.deathScreen.before` / `patch.deathScreen.after` 两条日志（`DeathScreen` 构造器的 prefix/postfix），是「判负被结算一次」的直接证据。
+- **Alternatives considered**: 只挂 `PostDrawSubscriber`（否决：取牌不触发）；只挂 `addToHand`（否决：抽牌堆检索绕过）；回合结束扫描手牌（否决：不满足「同一瞬间结束」）；`player.damage(...)` 触发判负（否决：复活资源会拦下，见上）。
 
 ## R-006 开局注入时机（2026-10-24 两轮探针实测，已定稿）
 
