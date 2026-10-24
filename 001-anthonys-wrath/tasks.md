@@ -54,9 +54,9 @@
 - [x] T012 [US1] 实现开局注入 `src/main/java/<modId>/run/StartDeckInjector.java`：实现 `PostCreateStartingDeckSubscriber`，基于 `optionId` 判定本局是否选中，选中则加入恰好一张；注入点在牌组创建之后、首次洗牌之前，具体先后按 T004 结论执行（`FR-002`、`FR-003`；覆盖 `EC-002`：Draft 等改写后的开局牌组；R-006 哨兵实验已确认该钩子的注入牌在 Draft 填充后存活且早于首洗） （2026-10-24 完成：`StartDeckInjector.injectIfSelected` 在 `PostCreateStartingDeck` 追加一张，`alreadyContainsCurse` 防重复；新档判定为 `CardCrawlGame.trial instanceof CustomTrial` + `AbstractPlayer.customMods` 含标识；读档不触发该钩子故不会重复注入）
 - [x] T013 [P] [US1] 在双语资源写入诅咒牌名称与描述初版（名称：中文「安东尼之怒」/ 英文 `Anthony's Wrath`），路径 `src/main/resources/strings/<modId>/`；描述定稿由 T033 按参照牌措辞覆盖完成（2026-10-24 完成：`cards.json` 初版，描述按参照牌 `CurseOfTheBell` 措辞写作「不能被打出。 NL 不能从牌组中移除。」/ `Unplayable. NL Cannot be removed from your deck.`；T033 定稿）
 - [x] T014 [US1] 选项标识容错（路线 a）：从存档恢复后的自定义模式项列表读取时忽略未知标识，保证本 mod 加载时对其它未知项健壮；EC-006 的「本 mod 未加载」场景由本体 / BaseMod 负责、QS-14 只作验证（实测崩溃则回 `/speckit-clarify`），路径 `src/main/java/<modId>/options/`（2026-10-24 完成：判定集中在 `run/RunState.isOptionSelected()`，只做 `contains(optionId)` 且对 `null` 列表返回 false，未知标识天然被忽略；`customMods` 为静态字段，另以 `Settings.isTrial || trial instanceof CustomTrial` 排除标准局残留）
-- [ ] T015 [US1] 实测并记录 US1：选项可见 / 显示名 / 效果说明（QS-01，`FR-014`）、开局牌组恰好一张（QS-02）、改写开局牌组注入（QS-08，Draft 场景，仅验加入与时机）、未加载本 mod 后读档不崩溃（QS-14）；结果追加到 `memory/log/`（2026-10-24：代码已就绪并自检通过，待普通终端 `mvn package` 后由用户实测 QS-01 / QS-02 / QS-08 再勾选）
+- [x] T015 [US1] 实测并记录 US1：选项可见 / 显示名 / 效果说明（QS-01，`FR-014`）、开局牌组恰好一张（QS-02）、改写开局牌组注入（QS-08，Draft 场景，仅验加入与时机）、未加载本 mod 后读档不崩溃（QS-14）；结果追加到 `memory/log/`（2026-10-24 验收：QS-01 / QS-02 / QS-08 通过——两局为铁甲战士普通自定义局与观者 + Draft 局；`awprobe.log` A#4 证明选中态可读、A#8→A#9 注入前 deck=10、注入后恰好 1 张且 A#10~A#13 保持 1 张；B#41 选中态含 Draft、B#45 空牌组、B#46 注入 1 张、B#50 Draft 填充 15 张后 masterDeck=16 仍含本牌、B#52 首洗晚于注入约 12 s；QS-01 另由游戏日志 RunModStrings/CardStrings 无缺键报错与 BaseMod `adding [ … ]` 记录佐证，中文文案目视复核留 US2 首轮顺手完成；**QS-14 未执行**，按 R-012 列入 T041 完整回归必做项；详见 `memory/log/022`）
 
-**Checkpoint**: 用户故事 1 可独立验证——选项可见、选中后牌组含牌、卸载容错。
+**Checkpoint**: 用户故事 1 可独立验证——选项可见、选中后牌组含牌、卸载容错。（2026-10-24 通过：QS-01 / QS-02 / QS-08 实测通过，证据 `memory/log/022`；QS-14 卸载容错未执行，已列入 T041 必做项）
 
 ---
 
@@ -141,7 +141,7 @@
 - [ ] T038 构建与加载验收：构建命令成功，`jar tf` 确认产物内含双语资源、贴图与 jar 根 `ModTheSpire.json`，mod 能被 ModTheSpire 正常加载且游戏可启动、日志无异常
 - [ ] T039 验证记录机制定稿：确认「流程 / 记录 / 结论」三级在实战中够用，边界不清处就地修正；记录追加到 `memory/log/`
 - [ ] T040 里程碑校验三层锁定与提交顺序（宪法第七、九条）：三段 gitlink 与各层 HEAD 一一对应、`.gitmodules` 地址可解析；提交顺序为先层后顶层
-- [ ] T041 按 [quickstart.md](./quickstart.md) 完成一次完整回归（QS-01 至 QS-17，覆盖 `SC-001` 至 `SC-005`），逐条记录结果到 `memory/log/`，作为宪法第五条「完成标准」的证据
+- [ ] T041 按 [quickstart.md](./quickstart.md) 完成一次完整回归（QS-01 至 QS-17，覆盖 `SC-001` 至 `SC-005`），逐条记录结果到 `memory/log/`，作为宪法第五条「完成标准」的证据（**QS-14 卸载 / 禁用后读旧档为必做项**：T015 未执行，发布前不得跳过；QS-01/02/08 已于 2026-10-24 通过，见 `memory/log/022`）
 
 ---
 

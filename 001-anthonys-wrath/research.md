@@ -59,7 +59,7 @@
   - 填充发生在 `PostDungeonInitialize` 之后、首战 `preBattlePrep` 之前；`PostCreateStartingDeck` 比首次洗牌早约 11 s，「注入早于第一次洗牌」成立（FR-003）；
   - 普通对照局 `PostCreateStartingDeck` 即收到 10 张标准牌组；读档路径不触发 `initializeStarterDeck` / `PostCreateStartingDeck`（牌组来自存档 ⇒ 注入器不会重复加牌，对 FR-002 有利）；
   - **哨兵实验（第二轮）**: `PostCreateStartingDeck` 空牌组（size=0）→ `probe.inject marker=AscendersBane deck=size=1` → `StartGame` / `StartAct` / `PostDungeonInitialize` 均为 masterDeck=1 → Draft 填充 15 张后首战 `preBattlePrep` 为 **masterDeck=16 且含 `AscendersBane`** ⇒ 注入牌未被填充清除，落点成立。
-- **Remaining**: 无探针侧缺口；实现后由 QS-08 做端到端复验。
+- **Remaining**: 无探针侧缺口；实现后由 QS-08 做端到端复验（**2026-10-24 已通过**：真实卡牌 + Draft 局注入后填充 15 张仍存活，见 `memory/log/022`）。
 - **Implemented（2026-10-24）**: `run/StartDeckInjector.injectIfSelected(...)` 挂在 `receivePostCreateStartingDeck`，选中时 `startingDeck.addToTop(new AnthonysWrathCurse())`（`CardGroup.addToTop` = 追加到组末），并用 cardID 防重复；选中判定见 §R-014。空牌组 Draft 局注入即 size=1，与哨兵实验一致。
 - **Alternatives considered**: 在第一次战斗开始时补齐注入（否决：会被存档与开局校验遗漏）；`preBattlePrep` 前缀（否决：哨兵实验已证明 `PostCreateStartingDeck` 足够，无需更晚介入）。
 
@@ -131,6 +131,11 @@
   - 标准局 / 每日挑战：`CardCrawlGame.updateFade` 的 startOver 分支会 `trial = null`、`Settings.isTrial = false`（标准局安全）；每日挑战走自己的 trial 类型（注入判定用 `instanceof CustomTrial`，安全）。
   - 文本加载：`BaseMod.loadCustomStringsFile(Type.class, path)` = `Gdx.files.internal(path).readString(UTF-8)` → `loadJsonStrings`；`typeMaps` 把 `CardStrings → cards`、`RunModStrings → mod`。**5.56.0 的 `findCallingModName()` 是 `aconst_null; areturn` 桩**，`loadJsonStrings` 因此不会自动加 `<modId>:` 前缀 ⇒ JSON 键必须是完整 id。
   - 卡牌注册：`BaseMod.addCard(card)` 按 `CardColor.CURSE` 进 `curseToAdd`，由 `CurseCardsPatch` 在卡库初始化后 `CardLibrary.add(card)`；随后 `AbstractDungeon.initializeCardPools → addCurseCards` 会把它收进 `curseCardPool` ⇒ EC-010 仍需 T027 在 `StartGame` 中排除。
+- **Verified in-game（2026-10-24：`awprobe.log` + 游戏日志 + `target/anthonyswrath.jar`（18:36 构建）；证据 `memory/log/022`）**:
+  - 两局（铁甲战士普通自定义局、观者 + Draft 局）`PreStartGame` 均读到 `customMods` 含 `anthonyswrath:AnthonysWrathOption`（选中态在新档可读，与第 3 条一致）；
+  - `PostCreateStartingDeck` 先后为 10 → 11（普通局，恰好 1 张）与 0 → 1（Draft 空牌组），`StartGame` / `StartAct` / `PostDungeonInitialize` 保持；Draft 填充 15 张后 `masterDeck=16` 仍含本牌，首洗晚于注入约 12 s；
+  - `RunModStrings` / `CardStrings` 均无缺键报错（选项与卡牌文本命中 JSON）；游戏日志同时出现 BaseMod 的 `adding [ … anthonyswrath:AnthonysWrath ]` 记录；
+  - 未覆盖：读档路径的选中态恢复与诅咒池复测（留 T027「存档→退出→继续」）；US2 未实现，首洗后本牌不在底部属预期。
 - **「负面：」前缀结论（T009）**: 本体 `CustomModeScreen`、`localization/*/run_mods.json` 与 `ui.json` 中都没有「负面：」文本，负面性只由红色（`"r"`）方括号表达，界面槽位不提供该前缀。为满足 US1 验收场景 1 的显式文案，中文选项名写入「负面：安东尼之怒」（不会重复）；英文按规格固定为 `Anthony's Wrath`。详见 `memory/log/021`。
 - **Alternatives considered**: 注册为 `isDailyMod=false`（否决：不进 `AbstractPlayer.customMods`，读档后无从判断，只能另造持久化，违背「不新增存档字段」）；读档后按显示名或卡牌是否在牌组反推选中状态（否决：无权威来源，且与 EC-007 冲突）。
 

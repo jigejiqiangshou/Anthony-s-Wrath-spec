@@ -77,6 +77,8 @@ awprobe shuffledeck               直接调 player.drawPile.shuffle()（无参�
 
 逐条执行；每条记录「操作 → 观察 → 是否通过」，并按需求号回填 `memory/log/`。
 
+> 2026-10-24 19:09–19:10 首轮验收实测（`mvn package` 产物 18:36；游戏日志 19:08 启动，两局）：**QS-01 / QS-02 / QS-08 通过**。证据：工作区 `awprobe.log`（事件 A#4、A#8~A#12、B#41、B#45~B#50）与 `memory/log/022`；游戏日志中 RunModStrings / CardStrings 无缺键报错，且 BaseMod 记录 `adding [ … anthonyswrath:AnthonysWrath ]` / `adding [ anthonyswrath:AnthonysWrath ]`。QS-01 的屏幕中文文案未留截图，US2 首轮实测时顺带目视复核；QS-14 未执行，留 T041 完整回归；QS-03/04/05 待 US2 实现后执行。
+
 | 编号 | 对应需求 | 操作 | 预期 |
 | :--- | :--- | :--- | :--- |
 | QS-01 | FR-001、FR-014 | 进入自定义模式选项列表 | 可见「负面：安东尼之怒」；勾选前即可看到效果说明文本 |
