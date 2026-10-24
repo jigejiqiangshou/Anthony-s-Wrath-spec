@@ -82,26 +82,30 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 
 > 2026-10-24 19:09–19:10 首轮验收实测（`mvn package` 产物 18:36；游戏日志 19:08 启动，两局）：**QS-01 / QS-02 / QS-08 通过**。证据：工作区 `awprobe.log`（事件 A#4、A#8~A#12、B#41、B#45~B#50）与 `memory/log/022`；游戏日志中 RunModStrings / CardStrings 无缺键报错，且 BaseMod 记录 `adding [ … anthonyswrath:AnthonysWrath ]` / `adding [ anthonyswrath:AnthonysWrath ]`。QS-01 的屏幕中文文案未留截图，US2 首轮实测时顺带目视复核；QS-14 未执行，留 T041 完整回归；QS-03/04/05 待 US2 实现后执行。
 
-> 2026-10-24 US2 实现完成（T016~T019：`run/DrawPileOrdering` + `patches/vanilla/CardGroupShufflePatch`；离线自检见 `memory/log/023`）。
+> 2026-10-24 US2 实现完成（T016~T019：`run/DrawPileOrdering` + `patches/vanilla/CardGroupShufflePatch`；离线自检见 `memory/log/023`），**T020 于 2026-10-24 21:22–21:26 实测通过**（`awprobe.log` 235 行；判读记录 `memory/log/026`）：
 >
-> **先读这条逻辑（2026-10-24 澄清，见 `spec.md` Assumptions 与 `research.md` §R-004 Reachability）**：「抽牌堆耗尽后的重洗」在成品中不可达——本牌每洗后都在底部，抽空抽牌堆的唯一方式是把它本身抽入手中，而那一刻已判负、后续抽牌被短路。成品可观测的洗牌只有「首次洗牌」与「卡牌 / 遗物触发的非耗尽重洗」；耗尽分支由洗牌原语补丁构造性覆盖，只在 US3 实装前的探针版做一次实现期验证（可选）。读日志注意：探针的 `patch.shuffle().after` / `patch.shuffle(Random).after` 可能早于本 mod 的置底后处理（2026-10-24 实测先看到索引 4、随后 `awprobe drawpile` 为索引 0），判断置底以 `hook.StartBattle` / `patch.initializeDeck.after` / `patch.emptyDeckShuffle.after` / `awprobe drawpile` 的**最终状态**为准。
+> | 场景 | 结果 | 证据（`awprobe.log`） |
+> | :--- | :--- | :--- |
+> | QS-03 首洗置底（新档 + Draft） | PASS | #10~#14、#38：首洗后 drawPile 索引 0 |
+> | QS-04 牌触发非耗尽重洗 ×2 | PASS | #42~#45、#151~#154：洗前 0 → `ShuffleAction` → `cmd.drawpile` 仍 0 |
+> | QS-04 抽牌堆耗尽重洗（先经 Scry 把本牌放入弃牌堆） | PASS | #106~#129：draw=0 时弃牌堆含本牌（索引 9）→ 洗后索引 0 → `emptyDeckShuffle.after` 自 drawPile=size=1 起始终在索引 0 |
+> | QS-05 多副本成组 | PASS | #163~#169：17 张首洗后两张副本位于 drawPile 0、1；`awprobe sinktest` 4/4 PASS（含 uuid 相对顺序核对） |
+> | QS-17 第二场战斗重新置底 | PASS | #169、#193：第二场 StartBattle 与 drawpile 均为索引 0 |
 >
-> T020 实测步骤（普通终端 `mvn package` 覆盖 `mods/anthonyswrath.jar`、删除旧 `awprobe.log` 后）：
+> **读日志注意**：探针的 `patch.shuffle().after` / `patch.shuffle(Random).after` 与 mod 置底后处理的先后**不保证**（本轮采集里无参原语曾先于置底、`Random` 重载曾后于置底），判断置底以 `hook.StartBattle` / `patch.initializeDeck.after` / `patch.emptyDeckShuffle.after` / `awprobe drawpile` 的**最终状态**为准。
 >
-> 1. **QS-03**：新档自定义局勾选本选项（建议同时勾「轮抽」以覆盖空开局牌组）→ 进第一场战斗，立即 `awprobe drawpile`：`drawPile` 索引 0 应为 `anthonyswrath:AnthonysWrath`；`hook.StartBattle` 的 `[after first shuffle, before initial draw]` 段与 `patch.preBattlePrep.after` 的 drawPile 同样应为索引 0。**2026-10-24 20:00–20:01 探针版已实测通过**（`awprobe.log` #16~#19、#43：首洗后索引 0，其后仍为 0；见 `memory/log/024`）。
-> 2. **QS-04**：同场战斗执行两次 `awprobe shuffleaction`（真实牌触发 `ShuffleAction` 路径，两次重洗即「至少两次重洗」），每次之后 `awprobe drawpile` 均应为索引 0（`patch.shuffle().after` 可能早于置底后处理，不要拿它当判据）。**2026-10-24 已实测一次通过**（#47~#50：洗前 0 → 探针 after 索引 4 → `cmd.drawpile` 索引 0）。也可用「冰冻之眼」在牌堆浏览界面目视复核。
-> 3. **QS-05**：结束第一场战斗（不抽到本牌），在有玩家对象的地图界面执行 `awprobe addcard anthonyswrath:AnthonysWrath`（masterDeck 变两张）→ 进下一场战斗 → `awprobe drawpile`：两张副本应连续位于索引 0、1。相对顺序用 `awprobe sinktest` 的 `case=grouped PASS`（确定性用例，含两张副本的 uuid 序核对）佐证。
-> 4. **QS-17**：第 3 步的「下一场战斗」同时验证第二场战斗重新置底（本牌仍在索引 0）。
-> 5. 顺手做 **QS-01 中文文案目视复核**（选项名「负面：安东尼之怒」与勾选前说明）。
-> 6. `awprobe sinktest` 应输出 `summary pass=4/4`（4 个确定性用例）。
-> 7. **可选（US3 实装前最后一次机会）**：耗尽重洗的实现期验证——先自然抽到本牌（探针版不判负）→ 回合结束让它进弃牌堆 → 继续打到抽牌堆再次耗尽，此时 `patch.emptyDeckShuffle` 之后 `awprobe drawpile` 应显示本牌索引 0。注意第一次耗尽时本牌还在手里、弃牌堆里没有它，所以第一次耗尽重洗观察不到（这正是成品不可达的原因）。
+> **「抽牌堆耗尽重洗」的到达条件（2026-10-24 二次修正，见 `spec.md` Assumptions 与 `research.md` §R-004 Reachability）**：若牌组没有任何「从抽牌堆直接弃牌」的效果，抽空抽牌堆必然先抽到本牌并判负，该分支不可达；但原版 Scry 类效果可把抽牌堆顶若干张牌直接放入弃牌堆（不入手的通道），当剩余张数 ≤ Scry 数时位于底部的本牌也会被弃掉，之后自然耗尽即可触发含本牌的重洗。本次实测正是这样复现的（本牌全程无入手事件）。早先「成品不可达」的记录已作废（`memory/log/024` → 修正 `memory/log/026`）。
+>
+> **T041 复现耗尽重洗的步骤（成品版）**：用观者或带 Scry 类牌的牌组（如 `CutThroughFate` / `JustLucky`）——① 正常战斗，把抽牌堆抽到只剩少量牌（本牌在索引 0，最后抽到）；② 剩余张数 ≤ 某张 Scry 牌的数量时打出该牌，在 Scry 选择界面把「安东尼之怒」放进弃牌堆；③ 继续抽空抽牌堆，下一次抽牌触发耗尽重洗；④ 用「冰冻之眼」或控制台确认重洗后本牌位于抽牌堆最底部。
+>
+> **遗留观察**：QS-01 的屏幕中文文案仍无截图/记录，留 T041 或下会话顺手复核；#159/#160 净化之泉把本牌从 masterDeck 删除属 US5（T029-T031）未实现的预期缺口，不是 US2 回归。
 
 | 编号 | 对应需求 | 操作 | 预期 |
 | :--- | :--- | :--- | :--- |
 | QS-01 | FR-001、FR-014 | 进入自定义模式选项列表 | 可见「负面：安东尼之怒」；勾选前即可看到效果说明文本 |
 | QS-02 | FR-002、US1 | 勾选该选项并开始新一局，打开牌组查看界面 | 牌组中恰好一张「安东尼之怒」诅咒牌 |
 | QS-03 | SC-001、FR-006 | 进入第一场战斗，用原版遗物「冰冻之眼」（不可用时用开发者控制台）按顺序查看抽牌堆 | 首次洗牌前该牌已在牌组中；首次洗牌结束后位于抽牌堆最底部（含 Draft 的空开局情况） |
-| QS-04 | SC-002、FR-006/007、EC-001 | 一场战斗中触发至少两次重洗（成品可达类型：卡牌 / 遗物触发的非耗尽重洗；「抽牌堆耗尽重洗」分支成品不可达，见 §4 说明） | 每次重洗后该牌均在抽牌堆最底部 |
+| QS-04 | SC-002、FR-006/007、EC-001 | 一场战斗中触发至少两次重洗，其中一次由卡牌 / 遗物效果触发（非耗尽）；「抽牌堆耗尽重洗」可用 Scry 类效果先把本牌从抽牌堆放入弃牌堆来复现（见 §4 步骤） | 每次重洗后该牌均在抽牌堆最底部 |
 | QS-05 | FR-007 | 若存在可作用于该牌的复制类效果则优先使用；否则用控制台加入第二张副本，随后洗牌并查看抽牌堆顺序 | 两张副本成组位于底部，且相对顺序不变 |
 | QS-06 | SC-003、FR-008/009 | 战斗推进直到自然抽到该牌 | 进入手牌瞬间本局立即结束，结算界面显示本局失败，无需额外操作；不要求结算界面额外说明失败原因 |
 | QS-07 | EC-008、FR-008 | 用「搜寻」类效果从抽牌堆或弃牌堆直接取牌 | 同样立即判负 |
