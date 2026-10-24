@@ -54,7 +54,7 @@ awprobe shuffledeck               直接调 player.drawPile.shuffle()（无参�
 - 卡 ID 大小写不敏感，`bell` 是 `CurseOfTheBell` 的别名；Tab 补全在参数位给出真实卡 ID（旧版把子命令词填进参数位，导致 `addcard` 收到 `cursepool`，见 `memory/log/018`）。若控制台仍异常，可改用 BaseMod 自带 `deck add CurseOfTheBell`（它走 `ShowCardAndObtainEffect`，与探针的 `masterDeck.addToTop` 语义不同，日志里会体现）。
 - 日志中 `drawPile` 列表**索引 0 = 底部（最后抽到），末位 = 下一次抽到**（`memory/facts/f010`）。
 
-采集场景（已覆盖项保留以便复跑；第二轮从场景 4 的弃牌堆取牌、5、6、7、8 开始）：
+采集场景（2026-10-24 两轮已全部执行，下列保留以便复跑）：
 
 1. 新档自定义模式开两局（勾选「轮抽（Draft）」或「Insanity」，再开一局不勾选任何改写牌组的选项）→ 观察 `initializeStarterDeck`、`PostCreateStartingDeck`、`customMods`；
 2. 第一场战斗开局 → `preBattlePrep` / `initializeDeck` / `shuffle` / `StartBattle` / 首次摸牌的先后；
@@ -66,6 +66,8 @@ awprobe shuffledeck               直接调 player.drawPile.shuffle()（无参�
 8. **读档路径**：任一局打到中途 → 存档退出 → 继续 → 观察 `initializeCardPools` 触发而 `PostDungeonInitialize` 不触发（R-007 证据；本牌注册后 T027 再补池内复测）。
 
 跑完后把 `awprobe.log` 交回，结论回写 `research.md` §R-004～§R-008。
+
+> 2026-10-24 两轮采集均已完成（`memory/log/018`、`memory/log/019`）：R-004～R-007 已定稿；R-008 的候选列表排除、商店移除链路与变化行为有实测，净化之泉 / 休息点路径留到实现后的 QS-11。后续回归按 §4 的 QS 清单执行。
 
 ## 4. 游戏内验证场景
 
