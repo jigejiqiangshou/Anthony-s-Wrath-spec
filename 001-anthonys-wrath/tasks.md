@@ -16,9 +16,9 @@
 
 - [x] T001 在顶层建立 `pom.xml`：Java 8 编译目标、显式 `sourceDirectory` 指向 `src/main/java`、`resources` 指向 `src/main/resources`（均在 `src` 子模块内），写入 modId、Java 包名与游戏补丁 / ModTheSpire / BaseMod / StSLib 的版本属性（`<properties>`，版本唯一事实来源）；游戏本体与 ModTheSpire 依赖以 provided / compileOnly scope 声明（平台产物，不计入第三方依赖），路径 `pom.xml`
 - [x] T002 [P] 建立顶层 `libs/` 依赖目录说明并校验忽略规则：确认 `.gitignore` 的 `*.jar` 为最终规则、`git ls-files "*.jar"` 输出为空；不引入任何第三方库，路径 `libs/`、`.gitignore`
-- [ ] T003 建立 mod 入口类 `src/main/java/<modId>/<ModEntry>.java`（BaseMod 初始化与订阅注册骨架），并补齐 jar 根 `src/main/resources/ModTheSpire.json` 的 `modid` / 游戏版本 / `dependencies` 字段（版本取自 `pom.xml` 属性），使构建命令能产出可加载的 mod jar（代码与清单已就位、JDK8 javac 编译通过；沙箱内 Maven 插件不可获取，`mvn package` 验证待普通终端联网执行，见 `memory/log/012` §8）
+- [x] T003 建立 mod 入口类 `src/main/java/<modId>/<ModEntry>.java`（BaseMod 初始化与订阅注册骨架），并补齐 jar 根 `src/main/resources/ModTheSpire.json` 的 `modid` / 游戏版本 / `dependencies` 字段（版本取自 `pom.xml` 属性），使构建命令能产出可加载的 mod jar（2026-10-24 验收：普通终端 `mvn package` 成功产出 `target/anthonyswrath.jar`，内含入口类与资源过滤后的清单；ModTheSpire 加载日志 Mod list 出现 `anthonyswrath (0.1.0)` 并完成初始化、游戏正常进主菜单后干净退出，见 `memory/log/015`）
 
-**Checkpoint**: 构建可产 jar，入口类可被 ModTheSpire 加载。
+**Checkpoint**: 构建可产 jar，入口类可被 ModTheSpire 加载。（2026-10-24 通过：构建 + 加载双证据见 `memory/log/015`）
 
 ---
 
@@ -28,7 +28,7 @@
 
 **⚠️ CRITICAL**: 本阶段未完成，任何用户故事都不得进入实现。
 
-- [ ] T004 **前置（一次性人工准备）**：ModTheSpire 加载器与 BaseMod、StSLib 已可用（Steam 创意工坊订阅或手动放入游戏目录 `mods/`），且 ModTheSpire 启动日志的 Mod list 中 `basemod` 与 `stslib` 同时出现、BaseMod 完成初始化；安装证据（订阅清单或启动器日志摘录）记入 `memory/log/`，作为本任务可被执行的判据。编写并运行游戏内时序探针 `src/main/java/<modId>/probe/TimingProbe.java`（仅日志输出）：回答 research.md R-004～R-008 与 quickstart §3 的六个问题——首次洗牌与候选钩子的先后、能覆盖首次洗牌与重洗的置底介入点、效果直接取牌与抽牌的判定点是否同一、清空初始牌组与开局牌组创建的先后、参照牌「铃铛的诅咒」在变化 / 移除下的实际表现、`PostDungeonInitialize` 是否晚于 `AbstractCardPools` 初始化；并枚举本体让参照牌「删不掉」的全部判定点，回写 research.md §R-008；探针输出与结论追加到 `memory/log/`
+- [ ] T004 **前置（一次性人工准备）**：ModTheSpire 加载器与 BaseMod、StSLib 已可用（Steam 创意工坊订阅或手动放入游戏目录 `mods/`），且 ModTheSpire 启动日志的 Mod list 中 `basemod` 与 `stslib` 同时出现、BaseMod 完成初始化；安装证据（订阅清单或启动器日志摘录）记入 `memory/log/`，作为本任务可被执行的判据。编写并运行游戏内时序探针 `src/main/java/<modId>/probe/TimingProbe.java`（仅日志输出）：回答 research.md R-004～R-008 与 quickstart §3 的六个问题——首次洗牌与候选钩子的先后、能覆盖首次洗牌与重洗的置底介入点、效果直接取牌与抽牌的判定点是否同一、清空初始牌组与开局牌组创建的先后、参照牌「铃铛的诅咒」在变化 / 移除下的实际表现、`PostDungeonInitialize` 是否晚于 `AbstractCardPools` 初始化；并枚举本体让参照牌「删不掉」的全部判定点，回写 research.md §R-008；探针输出与结论追加到 `memory/log/`（2026-10-24：探针代码已就位 `src/main/java/anthonyswrath/probe/`，含 TimingProbe / AwProbeCommand / ProbePatches / ProbeLog，JDK8 `javac` 编译通过；待用户运行采集数据，见 `memory/log/015`）
 - [ ] T005 [P] 建立双语文本资源骨架 `src/main/resources/strings/<modId>/`：中英 key 一一对应，格式按 BaseMod 实际加载规则在依赖 jar 就绪后核对；本任务只建空骨架与命名约定
 - [ ] T006 [P] 建立 `src/main/java/<modId>/patches/vanilla/` 包骨架与命名约定，供 US5 逐条实现；不可移除判定点清单由 T004 的枚举结论直接回写 `research.md` §R-008，本任务不重复承接该回写
 

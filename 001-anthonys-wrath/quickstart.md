@@ -38,6 +38,17 @@
 
 探针输出与结论记入 `memory/log/`；未得出结论前，不得进入对应实现（置底、入手判定、不可移除拦截、诅咒池排除）。
 
+**探针版本（开发期实现，T035 移除）**：代码位于 `src/main/java/<modId>/probe/`（`TimingProbe` 自注册、`ProbePatches` 只读观测、`AwProbeCommand` 控制台命令、`ProbeLog` 双写日志）。日志同时输出到 MTS 控制台与 `%USERPROFILE%\awprobe.log`；控制台（BaseMod Dev Console，反引号键打开）命令：`awprobe info|purge|cursepool|transform <cardID>|addcard <cardID>|shuffledeck`。采集场景：
+
+1. 新档自定义模式各开一次（勾选 / 不勾选「清空初始牌组」）→ 观察 `initializeStarterDeck`、`PostCreateStartingDeck`、`customMods`；
+2. 第一场战斗开局 → `preBattlePrep` / `initializeDeck` / `shuffle` / `StartBattle` / 首次摸牌的先后；
+3. 打到抽牌堆耗尽 → `emptyDeckShuffle` 与 `shuffle(discardPile)`；
+4. 用「搜寻」类效果直接取牌 → `addToTop` / `addToHand` 调用栈；
+5. `awprobe addcard CurseOfTheBell` 后进商店移除 / 休息点移除 / 净化之泉 → `getPurgeableCards`、`removeCard`、`fountain`；
+6. `awprobe transform CurseOfTheBell` 及变化类事件 → `transformCard` 的输入与 `transformedCard` 输出。
+
+跑完后把 `awprobe.log` 交回，结论回写 `research.md` §R-004～§R-008。
+
 ## 4. 游戏内验证场景
 
 逐条执行；每条记录「操作 → 观察 → 是否通过」，并按需求号回填 `memory/log/`。
