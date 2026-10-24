@@ -105,8 +105,14 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 > **T025 步骤**（全部使用「观者 + 本选项」新档；若用其它角色亦可，步骤不变）
 >
 > 1. **QS-06 自然抽到即负**：进第一场战斗，先用 `awprobe drawpile`（或「冰冻之眼」）确认本牌位于抽牌堆索引 0（底部）；正常推进回合、不断抽牌直到本牌入手。预期：本牌进入手牌瞬间播放死亡动画并进入失败结算（显示本局失败），无需任何额外操作。证据：`awprobe.log` 中 `patch.addToHand … card=anthonyswrath:AnthonysWrath` 之后出现**恰好一次** `patch.deathScreen.before` / `patch.deathScreen.after` 成对记录。
-> 2. **QS-07 搜寻取牌**：新开一局（或读档），用「秘密技法（Secret Technique）」类**抽牌堆**检索牌把本牌直接取入手牌；若牌组有「冥想（Meditate）」，也可先按 §4 的 Scry 步骤把本牌从抽牌堆放入弃牌堆，再用冥想从弃牌堆取回。预期：取牌完成瞬间同样判负。证据：抽牌堆检索路径出现 `patch.addToTop(hand) … card=anthonyswrath:AnthonysWrath`、弃牌堆取牌路径出现 `patch.addToHand … card=anthonyswrath:AnthonysWrath`，其后同样接一次 `patch.deathScreen.*`。
-> 3. **QS-09 多副本只结算一次 + 终局短路**：进战斗后用 `awprobe addcard anthonyswrath:AnthonysWrath` 加入第二张副本（或用复制类效果），先抽空抽牌堆触发一次重洗（此时两张副本应在底部），再用一次抽多张的效果（如「祭品」「战斗专注」）或自然抽牌让副本入手。预期：同一瞬间只结算一次失败；`patch.deathScreen.*` 在整份日志中**只出现一次**；判负后 `awprobe.log` 不再出现新的 `patch.draw(int).before` 行（本 mod 的 draw 入口已短路），死亡结算界面不接受任何操作。
+> 2. **QS-07 搜寻取牌**：新开一局（或读档），用 `awprobe addcard Seek`（Defect 的「搜寻」）/ `awprobe addcard Hologram`（「全息影像」）把检索牌加入 masterDeck——**下一场战斗才进入牌组**；`awprobe find <文字>` 可核对 ID。两种取牌路径任选其一或都做：
+>    - **抽牌堆检索（Seek）**：抽出「搜寻」后打出，网格会列出整个抽牌堆，选中「安东尼之怒」并确认。预期：取牌完成瞬间判负；`awprobe.log` 出现 `patch.addToTop(hand) … card=anthonyswrath:AnthonysWrath`，其后接一次 `patch.deathScreen.*`。
+>    - **弃牌堆检索（Hologram）**：先按上文 T041 的 Scry 步骤把本牌从抽牌堆放入弃牌堆，再打「全息影像」从弃牌堆取回本牌。预期：同样判负；日志出现 `patch.addToHand … card=anthonyswrath:AnthonysWrath` 后接一次 `patch.deathScreen.*`。
+>    - **不要用** Secret Technique / Secret Weapon 作样本：它们只能检索技能 / 攻击，本牌是诅咒，取不到。
+> 3. **QS-09 多副本只结算一次 + 终局短路**：用 `awprobe addcard anthonyswrath:AnthonysWrath` 加入第二张副本（下一场战斗生效；首洗后两张副本成组位于 drawPile 索引 0、1，见 QS-05）。核心判据：整份 `awprobe.log` 中 `patch.deathScreen.*` **只成对出现一次**；判负后不再出现新的 `patch.draw(int).before`。
+>    - **基本做法**：把抽牌堆抽到只剩两张（两张本牌），再打一次抽 ≥2 张的牌（如 `awprobe addcard Skim`，「快速浏览」抽 3）或自然抽牌。第一张入手即判负，终局短路使后续抽牌不再发生，不会出现第二次 `deathScreen`。
+>    - **可选（同一动作内两张同时入手，更严格）**：用 `awprobe addcard ThirdEye`（「第三只眼」，Scry 3）在抽牌堆只剩两张本牌时把两张一起放进弃牌堆；再打 `awprobe addcard Meditate`（「冥想」，从弃牌堆取至多 2 张）一次取回两张。预期：仍然只有**一次** `deathScreen`，第二张的判定被一次性守卫拦下。
+>    - 判负后死亡结算界面接管输入，尝试任何操作应无响应。
 > 4. **QS-15 失败记录**：在失败结算界面点「返回主菜单」，到「角色统计 / 游戏记录」确认本局计为失败（loss 计数 +1），游戏日志含 defeat metrics。
 > 5. **QS-16 主动放弃不触发特判**：新开一局，进战斗后不抽到本牌即「保存并退出」/放弃本局。预期：按本体流程处理；该流程中不出现由本牌触发的 `patch.deathScreen.*`（日志中 `deathScreen` 计数保持 0）。
 > 6. 顺手复核 QS-01 中文选项屏幕文案（历次遗留项）。
