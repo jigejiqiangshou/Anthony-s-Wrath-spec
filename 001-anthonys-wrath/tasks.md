@@ -68,13 +68,15 @@
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] 实现置底逻辑 `src/main/java/<modId>/run/DrawPileOrdering.java`：按 R-004 在两个 `CardGroup.shuffle` 原语（`shuffle(Random)` 与 `shuffle()`）的 postfix 上介入，把本牌移到被洗组索引 0 端（即抽牌堆底部）（`FR-006`）
-- [ ] T017 [US2] 在入口类接入该逻辑，覆盖战斗开始首次洗牌、抽牌堆耗尽重洗与卡牌 / 遗物触发的非耗尽重洗（`FR-006`、`EC-001`）
-- [ ] T018 [US2] 处理多副本：全部副本成组置于底部且相对顺序不变（`FR-007`），并在找不到该牌时直接跳过、不做额外判定（`EC-003`）
-- [ ] T019 [US2] 若介入点落在原版方法上，则把对应补丁放入 `src/main/java/<modId>/patches/vanilla/`，只判定本牌 cardID
-- [ ] T020 [US2] 实测并记录 US2：首次洗牌置底（QS-03，含 Draft 空开局牌组）、两次以上重洗（含非耗尽，QS-04）、多副本成组（QS-05）、第二场战斗重新置底（QS-17），覆盖 `SC-001`、`SC-002`；结果追加到 `memory/log/`
+> 2026-10-24 实现批次：T016～T019 已完成并通过 JDK8 `javac` 全量编译与离线补丁目标自检（18/18，见 `memory/log/023`）；T020 实测待用户按 `quickstart.md` §4 的 US2 段执行（含 `awprobe drawpile` / `shuffleaction` / `sinktest` 用法）。实现要点：选 R-004 的补丁路线——两个 `CardGroup.shuffle` 原语各挂 postfix，按 `DRAW_PILE` / `DISCARD_PILE` 类型过滤后把本牌移到被洗组索引 0 端；多副本按洗后相对顺序成组置底，缺席直接跳过。
 
-**Checkpoint**: 用户故事 2 可独立验证——三条洗牌路径后该牌均在底部。
+- [x] T016 [US2] 实现置底逻辑 `src/main/java/<modId>/run/DrawPileOrdering.java`：按 R-004 在两个 `CardGroup.shuffle` 原语（`shuffle(Random)` 与 `shuffle()`）的 postfix 上介入，把本牌移到被洗组索引 0 端（即抽牌堆底部）（`FR-006`）（2026-10-24 完成：`DrawPileOrdering.sinkCurseToBottom(CardGroup)` 只处理 `DRAW_PILE` / `DISCARD_PILE` 类型（战斗开始的临时组由 `initializeDeck` 构造为 `DRAW_PILE`）并附 `player.drawPile` / `player.discardPile` 身份兜底；索引 0 = 底部经字节码复核——`initializeDeck` 与 `EmptyDeckShuffleAction`→`Soul.shuffle` 两条搬运路径都按索引 0→尾 `drawPile.addToTop`；JDK8 `javac` 通过，见 `memory/log/023`）
+- [x] T017 [US2] 在入口类接入该逻辑，覆盖战斗开始首次洗牌、抽牌堆耗尽重洗与卡牌 / 遗物触发的非耗尽重洗（`FR-006`、`EC-001`）（2026-10-24 完成：按 R-004 选补丁路线，接入点即 T019 的 `@SpirePatch` 类——ModTheSpire 加载时扫描 jar 内 `@SpirePatch` 自动应用，无需在入口类注册订阅（与 T004 探针补丁同机制）；三条路径收敛于两个原语：战斗开始 `initializeDeck` 洗临时 `DRAW_PILE` 组、耗尽重洗 `EmptyDeckShuffleAction` 洗 `discardPile`、牌触发 `ShuffleAction`（`Reboot` / `DeepBreath`）洗 `drawPile` 与 `ShuffleAllAction` 洗 `discardPile`。V2.3.4 全 jar 静态清点仅 8 处 `CardGroup.shuffle` 调用点，其余 4 处洗 `UNSPECIFIED` 暂存组（已被类型过滤跳过）；无直接对牌堆 `group` 的 `Collections.shuffle`。说明写在入口类 javadoc，证据见 `memory/log/023`）
+- [x] T018 [US2] 处理多副本：全部副本成组置于底部且相对顺序不变（`FR-007`），并在找不到该牌时直接跳过、不做额外判定（`EC-003`）（2026-10-24 完成：按洗后相对顺序收成连续块放到索引 `0..k-1`；组内无本牌时返回 false 且不改动（EC-003）；确定性自检命令 `awprobe sinktest`（4 用例：成组/幂等/缺席/非牌堆组跳过，含 uuid 序核对）随 T020 执行）
+- [x] T019 [US2] 若介入点落在原版方法上，则把对应补丁放入 `src/main/java/<modId>/patches/vanilla/`，只判定本牌 cardID（2026-10-24 完成：`patches/vanilla/CardGroupShufflePatch.java`，两个内部类分别 postfix `shuffle()`（`paramtypez = {}`）与 `shuffle(Random)`，只调用 `DrawPileOrdering` 判定本牌 cardID；离线复刻 MTS 目标解析自检 18/18 OK——含两条新补丁精确命中对应重载，`memory/log/023`）
+- [ ] T020 [US2] 实测并记录 US2：首次洗牌置底（QS-03，含 Draft 空开局牌组）、两次以上重洗（含非耗尽，QS-04）、多副本成组（QS-05）、第二场战斗重新置底（QS-17），覆盖 `SC-001`、`SC-002`；结果追加到 `memory/log/`（待用户执行：步骤与探针命令见 `quickstart.md` §4 的 2026-10-24 US2 实测段）
+
+**Checkpoint**: 用户故事 2 可独立验证——三条洗牌路径后该牌均在底部。（2026-10-24：T016~T019 实现完成、离线自检通过，见 `memory/log/023`；T020 游戏内实测待用户执行）
 
 ---
 

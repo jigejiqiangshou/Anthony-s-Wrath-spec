@@ -35,6 +35,13 @@
   - 抽牌方向：`getTopCard()` 返回 `group.get(size-1)`，两轮 15/15 次实测「dump 末位先被抽走」⇒ **drawPile 索引 0 = 底部（最后抽到），末位 = 下一次抽到**；`ProbeLog.ids()` 原注释「index 0 = top」已修正。
   - **无参原语**（第二轮）：`awprobe shuffledeck` 直接触发 `patch.shuffle().before/after`（`player.drawPile`，`CardGroup.shuffle()`），证明第二原语可被补丁观测且作用于玩家抽牌堆。
 - **Remaining（留待实现后验证）**: 多副本成组置底与相对顺序（FR-007、QS-05）只能在真实卡牌注册后用 QS-05 验证；端到端置底断言属 QS-03 / QS-04 / QS-17。探针侧已无缺口：两个洗牌原语、首次与耗尽重洗、抽牌方向均已实测；原版是否存在「卡牌 / 遗物触发的非耗尽洗牌来源」未找到独立样本，但介入点落在洗牌原语上，任何来源都会被覆盖。
+- **Implemented（2026-10-24，T016~T019 回写）**: 排序规则在 `run/DrawPileOrdering.sinkCurseToBottom(CardGroup)`，`patches/vanilla/CardGroupShufflePatch` 对两个原语各挂一个 postfix 调用它。
+  - **作用范围**: 只处理 `CardGroupType.DRAW_PILE` / `DISCARD_PILE`（战斗开始的临时组由 `initializeDeck` 构造为 `DRAW_PILE`），外加 `player.drawPile` / `player.discardPile` 身份兜底；暂存 `UNSPECIFIED` 组与卡池组不重排。
+  - **置底方向复核（字节码）**: `initializeDeck` 先 `new CardGroup(masterDeck, DRAW_PILE)` 再 `shuffle(shuffleRng)`，随后按索引 0→尾对 `drawPile.addToTop(card)` 搬运；`EmptyDeckShuffleAction` 洗 `discardPile` 后由 `Soul.shuffle` 把 `group` 指向 `drawPile` 再 `addToTop(card)`——两条路径都把被洗组的索引 0 映射为 `drawPile` 索引 0（底部），与 §R-004 的实测方向一致。
+  - **多副本与缺席**: 按洗后相对顺序收成连续块放在 `0..k-1`；组内无本牌时直接返回 false、不做额外判定（EC-003）。
+  - **洗牌路径静态清点（V2.3.4，全 jar 常量池扫描 + javap）**: 全库仅 8 处 `CardGroup.shuffle` 调用点——`initializeDeck`（战斗开始首次洗牌，临时 `DRAW_PILE` 组，`shuffle(Random)`）、`EmptyDeckShuffleAction`（`discardPile`，`shuffle(Random)`）、`ShuffleAction`（`Reboot` / `DeepBreath` 对 `drawPile` 调 `shuffle()`）、`ShuffleAllAction`（`Reboot`，`discardPile`，`shuffle(Random)`）这四处作用于战斗牌堆；其余 `DrawPileToHandAction` / `UpgradeRandomCardAction` / `TwistingMind` / `CardLibrary.getAnyColorCard` 洗的都是 `UNSPECIFIED` 暂存组，已被类型过滤跳过。另扫描全库 `Collections.shuffle` 调用：没有一处直接洗 `drawPile` / `discardPile` 的 `group` 列表（只有克隆的手牌列表、遗物/药水池、事件暂存组）。因此「卡牌 / 遗物触发的非耗尽重洗」真实样本是 `Reboot` / `DeepBreath`，且都收敛到两个原语。
+  - **离线自检**: 复刻 MTS `paramtypez` 解析逻辑检查 18/18 补丁全部命中目标（含两条新补丁：`paramtypez={}` 命中 `shuffle()`、`{Random}` 命中 `shuffle(Random)`）；JDK8 `javac` 全量编译 exit 0。证据 `memory/log/023`。
+  - **Remaining（转 T020）**: 游戏内端到端 QS-03 / QS-04 / QS-05 / QS-17；“多副本相对顺序”另有确定性自检 `awprobe sinktest`，多副本端到端用 `awprobe addcard anthonyswrath:AnthonysWrath` 后进战斗，非耗尽重洗可用 `awprobe shuffleaction`（真实 `ShuffleAction` 路径）。
 - **Alternatives considered**: 只在 `StartBattle` 置底（否决：不覆盖中途重洗，实测重洗发生在该钩子之后）；只挂 `shuffle(Random)`（否决：无参重载是独立实现而非转调，必须两处都挂）；在每次抽牌前动态校正作为唯一手段（否决：不满足「洗牌后即在底部」的可观察性）。
 
 ## R-005 入手判定点（2026-10-24 两轮探针实测，已定稿）

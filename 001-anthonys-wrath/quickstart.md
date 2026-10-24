@@ -53,6 +53,9 @@ awprobe addcard <cardID>|bell     masterDeck 加一张副本（bell = CurseOfThe
 awprobe bell                      同 addcard bell，免参数
 awprobe transform <cardID>|bell   调 AbstractDungeon.transformCard 并记录 transformedCard
 awprobe shuffledeck               直接调 player.drawPile.shuffle()（无参洗牌原语）
+awprobe shuffleaction             入队真实 ShuffleAction(drawPile, true)（Reboot / DeepBreath 的牌触发非耗尽洗牌路径）
+awprobe drawpile                  dump drawPile / discardPile（索引 0 = 底部），不触发洗牌
+awprobe sinktest                  DrawPileOrdering 确定性自检（多副本成组/保序、缺席跳过、非牌堆组跳过）
 ```
 
 - 卡 ID 大小写不敏感，`bell` 是 `CurseOfTheBell` 的别名；Tab 补全在参数位给出真实卡 ID（旧版把子命令词填进参数位，导致 `addcard` 收到 `cursepool`，见 `memory/log/018`）。若控制台仍异常，可改用 BaseMod 自带 `deck add CurseOfTheBell`（它走 `ShowCardAndObtainEffect`，与探针的 `masterDeck.addToTop` 语义不同，日志里会体现）。
@@ -78,6 +81,15 @@ awprobe shuffledeck               直接调 player.drawPile.shuffle()（无参�
 逐条执行；每条记录「操作 → 观察 → 是否通过」，并按需求号回填 `memory/log/`。
 
 > 2026-10-24 19:09–19:10 首轮验收实测（`mvn package` 产物 18:36；游戏日志 19:08 启动，两局）：**QS-01 / QS-02 / QS-08 通过**。证据：工作区 `awprobe.log`（事件 A#4、A#8~A#12、B#41、B#45~B#50）与 `memory/log/022`；游戏日志中 RunModStrings / CardStrings 无缺键报错，且 BaseMod 记录 `adding [ … anthonyswrath:AnthonysWrath ]` / `adding [ anthonyswrath:AnthonysWrath ]`。QS-01 的屏幕中文文案未留截图，US2 首轮实测时顺带目视复核；QS-14 未执行，留 T041 完整回归；QS-03/04/05 待 US2 实现后执行。
+
+> 2026-10-24 US2 实现完成（T016~T019：`run/DrawPileOrdering` + `patches/vanilla/CardGroupShufflePatch`；离线自检见 `memory/log/023`）。T020 实测步骤（普通终端 `mvn package` 覆盖游戏 `mods/anthonyswrath.jar`、删除旧 `awprobe.log` 后）：
+>
+> 1. **QS-03**：新档自定义局勾选本选项（建议同时勾「轮抽」以覆盖空开局牌组）→ 进第一场战斗，立即 `awprobe drawpile`：`drawPile` 索引 0 应为 `anthonyswrath:AnthonysWrath`；日志 `hook.StartBattle` 的 `[after first shuffle, before initial draw]` 段与 `patch.preBattlePrep.after` 的 drawPile 同样应为索引 0。
+> 2. **QS-04**：同场战斗先 `awprobe shuffleaction`（真实牌触发 `ShuffleAction` 路径）→ `awprobe drawpile` 再确认索引 0；继续出牌把抽牌堆抽空触发耗尽重洗（日志出现 `patch.emptyDeckShuffle` 与 `patch.shuffle(Random).after`），重洗后 `awprobe drawpile` 仍应为索引 0。也可用「冰冻之眼」在牌堆浏览界面目视复核。
+> 3. **QS-05**：战斗外在有玩家对象的地图界面执行 `awprobe addcard anthonyswrath:AnthonysWrath`（masterDeck 变两张）→ 进下一场战斗 → `awprobe drawpile`：两张副本应连续位于索引 0、1。相对顺序用 `awprobe sinktest` 的 `case=grouped PASS`（确定性用例，含两张副本的 uuid 序核对）佐证。
+> 4. **QS-17**：第一场战斗不抽到本牌即结束（本牌在底部，正常打完通常不会抽到）→ 第二场战斗 `awprobe drawpile`：本牌仍在索引 0。
+> 5. 顺手做 **QS-01 中文文案目视复核**（选项名「负面：安东尼之怒」与勾选前说明）。
+> 6. `awprobe sinktest` 应输出 `summary pass=4/4`（4 个确定性用例）。
 
 | 编号 | 对应需求 | 操作 | 预期 |
 | :--- | :--- | :--- | :--- |
