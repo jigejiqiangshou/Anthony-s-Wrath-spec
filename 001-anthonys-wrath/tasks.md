@@ -29,10 +29,10 @@
 **⚠️ CRITICAL**: 本阶段未完成，任何用户故事都不得进入实现。
 
 - [x] T004 **前置（一次性人工准备）**：ModTheSpire 加载器与 BaseMod、StSLib 已可用（Steam 创意工坊订阅或手动放入游戏目录 `mods/`），且 ModTheSpire 启动日志的 Mod list 中 `basemod` 与 `stslib` 同时出现、BaseMod 完成初始化；安装证据（订阅清单或启动器日志摘录）记入 `memory/log/`，作为本任务可被执行的判据。编写并运行游戏内时序探针 `src/main/java/<modId>/probe/TimingProbe.java`（仅日志输出）：回答 research.md R-004～R-008 与 quickstart §3 的六个问题——首次洗牌与候选钩子的先后、能覆盖首次洗牌与重洗的置底介入点、效果直接取牌与抽牌的判定点是否同一、「轮抽（Draft）」等改写牌组选项与开局牌组创建 / 填充的先后、参照牌「铃铛的诅咒」在变化 / 移除下的实际表现、`PostDungeonInitialize` 是否晚于 `AbstractCardPools` 初始化；并枚举本体让参照牌「删不掉」的全部判定点，回写 research.md §R-008；探针输出与结论追加到 `memory/log/`（2026-10-24：探针代码已就位 `src/main/java/anthonyswrath/probe/`，含 TimingProbe / AwProbeCommand / ProbePatches / ProbeLog，JDK8 `javac` 编译通过；待用户运行采集数据，见 `memory/log/015`）（2026-10-24 第二轮采集：`awprobe.log` 654 行覆盖 4 局 / 6 战；R-004 首洗与耗尽重洗时序、R-005 两个入手判定点、R-006 开局注入时序、R-007 钩子时序均已实测并回写 `research.md`；遗留 R-008 场景 5/6、R-004 非耗尽重洗 / 多副本、R-005 弃牌堆取牌、R-006 Draft 存活待补采；探针已修 `addcard` 控制台补全事故并加入 R-006 标记注入实验，见 `memory/log/018`）（2026-10-24 完成：第二轮 `awprobe.log` 250 行补齐全部缺口——R-004 无参洗牌原语、R-005 弃牌堆取牌（Meditate → `addToHand`）、R-006 哨兵注入确认 Draft 填充后存活（首战 16 张含 `AscendersBane`）、R-007 读档路径复现（池重建而 `PostDungeonInitialize` 不触发）、R-008 商店移除链路（`getPurgeableCards` + `masterDeck.removeCard(obj)`）与变化行为（`CurseOfTheBell` → `Parasite` / `Doubt`）；六问全部有实测答案，净化之泉路径按 quickstart §5 允许跳过、留实现后 QS-11；见 `memory/log/019`）
-- [ ] T005 [P] 建立双语文本资源骨架 `src/main/resources/strings/<modId>/`：中英 key 一一对应，格式按 BaseMod 实际加载规则在依赖 jar 就绪后核对；本任务只建空骨架与命名约定
-- [ ] T006 [P] 建立 `src/main/java/<modId>/patches/vanilla/` 包骨架与命名约定，供 US5 逐条实现；不可移除判定点清单由 T004 的枚举结论直接回写 `research.md` §R-008，本任务不重复承接该回写
+- [x] T005 [P] 建立双语文本资源骨架 `src/main/resources/strings/<modId>/`：中英 key 一一对应，格式按 BaseMod 实际加载规则在依赖 jar 就绪后核对；本任务只建空骨架与命名约定（2026-10-24 完成：按 BaseMod 5.56.0 `loadCustomStringsFile` 实测规则落为 `strings/anthonyswrath/<lang>/{cards,run_mods}.json`，language 目录取 `Settings.GameLanguage` 小写值、缺语言回退 `eng`；本仓 5.56.0 的 `findCallingModName()` 恒返回 null，故 JSON key 必须写完整 id（卡=完整 cardID，选项=完整 optionId），不做 modId 前缀；命名约定与核对方法见 `ModStrings` javadoc、`research.md` §R-014 与 `memory/log/021`）
+- [x] T006 [P] 建立 `src/main/java/<modId>/patches/vanilla/` 包骨架与命名约定，供 US5 逐条实现；不可移除判定点清单由 T004 的枚举结论直接回写 `research.md` §R-008，本任务不重复承接该回写（2026-10-24 完成：`src/main/java/anthonyswrath/patches/vanilla/package-info.java`，一个原版目标一个类、只判定本牌 cardID、不出玩家可见文本；实际补丁由 T019/T024/T029-T031 填充）
 
-**Checkpoint**: 实现落点全部有实测依据，文本与补丁包骨架就绪。（2026-10-24：T004 已完成，R-004～R-008 结论已定稿，六问全部有实测答案，见 `memory/log/018`、`memory/log/019`；T005 / T006 待做）
+**Checkpoint**: 实现落点全部有实测依据，文本与补丁包骨架就绪。（2026-10-24：T004 已完成，R-004～R-008 结论已定稿，六问全部有实测答案，见 `memory/log/018`、`memory/log/019`；T005 / T006 已完成，见 `memory/log/021`；Phase 2 通过）
 
 ---
 
@@ -44,15 +44,17 @@
 
 ### Implementation for User Story 1
 
-- [ ] T007 [P] [US1] 实现自定义模式选项类 `src/main/java/<modId>/options/AnthonysWrathOption.java`：稳定 `optionId` 形如 `<modId>:AnthonysWrathOption`，显示名与说明文本取自 `strings/`，不写死字符串
-- [ ] T008 [US1] 在入口类注册该选项（注册接口名以 BaseMod jar 实物为准，并回写 research.md §R-003），确认标识不与本体选项冲突，同名第三方选项通过标识区分、互不覆盖（`EC-007`）
-- [ ] T009 [P] [US1] 在双语资源写入选项显示名「安东尼之怒」与勾选前可见的效果说明文本（`FR-014`），路径 `src/main/resources/strings/<modId>/`；并比对本体负面选项的前缀规则，确认「负面：」前缀由界面槽位提供还是需写入文本、不得重复，结论记入 `memory/log/`
-- [ ] T010 [P] [US1] 实现诅咒牌类 `src/main/java/<modId>/cards/AnthonysWrathCurse.java`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2、`CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例（`FR-004`、`FR-005`）
-- [ ] T011 [US1] 在 `EditCardsSubscriber.receiveEditCards` 中注册诅咒牌并确认游戏将其识别为诅咒（`FR-004`），路径 `src/main/java/<modId>/<ModEntry>.java`
-- [ ] T012 [US1] 实现开局注入 `src/main/java/<modId>/run/StartDeckInjector.java`：实现 `PostCreateStartingDeckSubscriber`，基于 `optionId` 判定本局是否选中，选中则加入恰好一张；注入点在牌组创建之后、首次洗牌之前，具体先后按 T004 结论执行（`FR-002`、`FR-003`；覆盖 `EC-002`：Draft 等改写后的开局牌组；R-006 哨兵实验已确认该钩子的注入牌在 Draft 填充后存活且早于首洗）
-- [ ] T013 [P] [US1] 在双语资源写入诅咒牌名称与描述初版（名称：中文「安东尼之怒」/ 英文 `Anthony's Wrath`），路径 `src/main/resources/strings/<modId>/`；描述定稿由 T033 按参照牌措辞覆盖完成
-- [ ] T014 [US1] 选项标识容错（路线 a）：从存档恢复后的自定义模式项列表读取时忽略未知标识，保证本 mod 加载时对其它未知项健壮；EC-006 的「本 mod 未加载」场景由本体 / BaseMod 负责、QS-14 只作验证（实测崩溃则回 `/speckit-clarify`），路径 `src/main/java/<modId>/options/`
-- [ ] T015 [US1] 实测并记录 US1：选项可见 / 显示名 / 效果说明（QS-01，`FR-014`）、开局牌组恰好一张（QS-02）、改写开局牌组注入（QS-08，Draft 场景，仅验加入与时机）、未加载本 mod 后读档不崩溃（QS-14）；结果追加到 `memory/log/`
+> 2026-10-24 实现批次：T007～T014 已完成并通过 JDK8 `javac` 自检（`memory/log/021`）；T015 的实测待普通终端 `mvn package` 后由用户按 QS-01 / QS-02 / QS-08 执行。实现要点：选项以 `<modId>:AnthonysWrathOption` 注册、`isDailyMod=true` 走 `CustomTrial` 通道以写入 `AbstractPlayer.customMods`（新档与读档均可得，见 `research.md` §R-014）；注入由 `PostCreateStartingDeck` 完成（R-006 落点）；本体负面选项只用红色方括号表达「负面」，文本层不含「负面：」字样，故按 US1 验收场景 1 在中文选项名写入该前缀（英文名按规格保持 `Anthony's Wrath`），结论见 `memory/log/021`。
+
+- [x] T007 [P] [US1] 实现自定义模式选项类 `src/main/java/<modId>/options/AnthonysWrathOption.java`：稳定 `optionId` 形如 `<modId>:AnthonysWrathOption`，显示名与说明文本取自 `strings/`，不写死字符串（2026-10-24 完成：`OPTION_ID = "anthonyswrath:AnthonysWrathOption"`，`create()` 返回 `new CustomMod(OPTION_ID, "r", true)`；名称/说明由 `CustomMod` 构造器按 `OPTION_ID` 从 `RunModStrings` 读取）
+- [x] T008 [US1] 在入口类注册该选项（注册接口名以 BaseMod jar 实物为准，并回写 research.md §R-003），确认标识不与本体选项冲突，同名第三方选项通过标识区分、互不覆盖（`EC-007`）（2026-10-24 完成：`AnthonysWrathMod implements AddCustomModeModsSubscriber.receiveCustomModeMods(List<CustomMod>)`；标识带 modId 命名空间且不入 `getActiveNonDailyMods`，不与本体选项同名冲突；R-003 已回写）
+- [x] T009 [P] [US1] 在双语资源写入选项显示名「安东尼之怒」与勾选前可见的效果说明文本（`FR-014`），路径 `src/main/resources/strings/<modId>/`；并比对本体负面选项的前缀规则，确认「负面：」前缀由界面槽位提供还是需写入文本、不得重复，结论记入 `memory/log/`（2026-10-24 完成：`zhs/run_mods.json` 名称「负面：安东尼之怒」、`eng/run_mods.json` 名称 `Anthony's Wrath`，两语言均带勾选前可见的说明；比对结论：本体负面选项仅用红色方括号（`NEGATIVE_COLOR = "r"`）表达「负面」、`CustomModeScreen` 与本地化文本都不提供「负面：」字样，故按 US1 验收场景 1 写入中文名，不存在重复前缀；见 `memory/log/021`）
+- [x] T010 [P] [US1] 实现诅咒牌类 `src/main/java/<modId>/cards/AnthonysWrathCurse.java`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2、`CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例（`FR-004`、`FR-005`）（2026-10-24 完成：参数与参照牌一致；`upgrade()` 空实现 + CURSE 类型使 `canUpgrade()` 恒 false；`makeCopy()` 返回 `new AnthonysWrathCurse()`）
+- [x] T011 [US1] 在 `EditCardsSubscriber.receiveEditCards` 中注册诅咒牌并确认游戏将其识别为诅咒（`FR-004`），路径 `src/main/java/<modId>/<ModEntry>.java`（2026-10-24 完成：`receiveEditCards` → `BaseMod.addCard(new AnthonysWrathCurse())`；`CardColor.CURSE` 由 BaseMod 归入 `curseToAdd`，经 `CardLibrary` 注册，卡牌类别为 `CURSE`）
+- [x] T012 [US1] 实现开局注入 `src/main/java/<modId>/run/StartDeckInjector.java`：实现 `PostCreateStartingDeckSubscriber`，基于 `optionId` 判定本局是否选中，选中则加入恰好一张；注入点在牌组创建之后、首次洗牌之前，具体先后按 T004 结论执行（`FR-002`、`FR-003`；覆盖 `EC-002`：Draft 等改写后的开局牌组；R-006 哨兵实验已确认该钩子的注入牌在 Draft 填充后存活且早于首洗） （2026-10-24 完成：`StartDeckInjector.injectIfSelected` 在 `PostCreateStartingDeck` 追加一张，`alreadyContainsCurse` 防重复；新档判定为 `CardCrawlGame.trial instanceof CustomTrial` + `AbstractPlayer.customMods` 含标识；读档不触发该钩子故不会重复注入）
+- [x] T013 [P] [US1] 在双语资源写入诅咒牌名称与描述初版（名称：中文「安东尼之怒」/ 英文 `Anthony's Wrath`），路径 `src/main/resources/strings/<modId>/`；描述定稿由 T033 按参照牌措辞覆盖完成（2026-10-24 完成：`cards.json` 初版，描述按参照牌 `CurseOfTheBell` 措辞写作「不能被打出。 NL 不能从牌组中移除。」/ `Unplayable. NL Cannot be removed from your deck.`；T033 定稿）
+- [x] T014 [US1] 选项标识容错（路线 a）：从存档恢复后的自定义模式项列表读取时忽略未知标识，保证本 mod 加载时对其它未知项健壮；EC-006 的「本 mod 未加载」场景由本体 / BaseMod 负责、QS-14 只作验证（实测崩溃则回 `/speckit-clarify`），路径 `src/main/java/<modId>/options/`（2026-10-24 完成：判定集中在 `run/RunState.isOptionSelected()`，只做 `contains(optionId)` 且对 `null` 列表返回 false，未知标识天然被忽略；`customMods` 为静态字段，另以 `Settings.isTrial || trial instanceof CustomTrial` 排除标准局残留）
+- [ ] T015 [US1] 实测并记录 US1：选项可见 / 显示名 / 效果说明（QS-01，`FR-014`）、开局牌组恰好一张（QS-02）、改写开局牌组注入（QS-08，Draft 场景，仅验加入与时机）、未加载本 mod 后读档不崩溃（QS-14）；结果追加到 `memory/log/`（2026-10-24：代码已就绪并自检通过，待普通终端 `mvn package` 后由用户实测 QS-01 / QS-02 / QS-08 再勾选）
 
 **Checkpoint**: 用户故事 1 可独立验证——选项可见、选中后牌组含牌、卸载容错。
 

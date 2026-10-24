@@ -22,6 +22,7 @@
 - **Rationale**: 全部走 BaseMod 公开订阅点，避免不必要的原版补丁；只有订阅点覆盖不到的判定才进 `patches/vanilla/`。
 - **Alternatives considered**: 全部用补丁实现（否决：补丁面积大、升级游戏版本时易碎）。
 - **Verified（2026-10-24，实物核对）**: `libs/BaseMod.jar` 内实有 `basemod/interfaces/AddCustomModeModsSubscriber.class`，方法为 `receiveCustomModeMods(java.util.List<com.megacrit.cardcrawl.screens.custom.CustomMod>)`；对应发布端 `BaseMod.publishAddCustomModeMods(List<CustomMod>)`。旧文档中的 `CustomModeMods` / `receiveAddCustomModeMods` 不存在，作废。方法：`jar tf` + `javap`，证据见 `memory/facts/f009` 与 `memory/log/014`。
+- **Implemented（2026-10-24，T008 回写）**: 入口类同时实现 `EditStringsSubscriber` / `EditCardsSubscriber` / `AddCustomModeModsSubscriber` / `PostCreateStartingDeckSubscriber`，全部经 `BaseMod.subscribe(this)` 注册；选项在 `receiveCustomModeMods` 中 `mods.add(AnthonysWrathOption.create())`。选项实例 = `new CustomMod(optionId, "r", true)`：第 2 参数是**颜色**而非名称、第 3 参数 `isDailyMod` 才是持久化通道，口径见 §R-014。
 
 ## R-004 洗牌后置底介入点（2026-10-24 两轮探针实测，已定稿）
 
@@ -59,6 +60,7 @@
   - 普通对照局 `PostCreateStartingDeck` 即收到 10 张标准牌组；读档路径不触发 `initializeStarterDeck` / `PostCreateStartingDeck`（牌组来自存档 ⇒ 注入器不会重复加牌，对 FR-002 有利）；
   - **哨兵实验（第二轮）**: `PostCreateStartingDeck` 空牌组（size=0）→ `probe.inject marker=AscendersBane deck=size=1` → `StartGame` / `StartAct` / `PostDungeonInitialize` 均为 masterDeck=1 → Draft 填充 15 张后首战 `preBattlePrep` 为 **masterDeck=16 且含 `AscendersBane`** ⇒ 注入牌未被填充清除，落点成立。
 - **Remaining**: 无探针侧缺口；实现后由 QS-08 做端到端复验。
+- **Implemented（2026-10-24）**: `run/StartDeckInjector.injectIfSelected(...)` 挂在 `receivePostCreateStartingDeck`，选中时 `startingDeck.addToTop(new AnthonysWrathCurse())`（`CardGroup.addToTop` = 追加到组末），并用 cardID 防重复；选中判定见 §R-014。空牌组 Draft 局注入即 size=1，与哨兵实验一致。
 - **Alternatives considered**: 在第一次战斗开始时补齐注入（否决：会被存档与开局校验遗漏）；`preBattlePrep` 前缀（否决：哨兵实验已证明 `PostCreateStartingDeck` 足够，无需更晚介入）。
 
 ## R-007 随机诅咒池排除（2026-10-24 探针实测；落点改为 StartGame 钩子）
@@ -89,6 +91,7 @@
 
 - **Decision**: 诅咒牌继承 `CustomCard`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2（本体「不可打出」判定依据）、稀有度取参照牌实际使用的 `CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例；名称与描述取自双语 `strings/`，描述按参照牌措辞直接写明「不能被打出」「不能从牌组中移除」，不使用关键词样式或颜色标记。
 - **Rationale**: FR-004/005/012/013 要求与本体诅咒及参照牌行为一致；硬编码文本会违反宪法第二条。
+- **Implemented（2026-10-24，T010/T013）**: `cards/AnthonysWrathCurse` 的 `super(...)` 参数为 `(CARD_ID, NAME, "placeholder/AnthonysWrath.png", -2, DESCRIPTION, CURSE, CURSE, SPECIAL, NONE)`；`CardType.CURSE` 使本体 `canUpgrade()` 恒 false（`upgrade()` 仅因抽象而留空），`makeCopy()` 显式返回新实例。名称/描述静态取自 `CardCrawlGame.languagePack.getCardStrings(CARD_ID)`（`EditStrings` 先于 `EditCards` 触发，类在 `receiveEditCards` 首次加载时字符串已就绪）。贴图为开发期占位图 `src/main/resources/placeholder/AnthonysWrath.png`（由 `src/.gitignore` 忽略，T036 替换）；`ImageMaster.loadImage` 对缺失图片只告警并返回 null，故不能省略占位文件。
 - **Alternatives considered**: 复用参照牌文本 key（否决：命名空间与卸载行为不可控）。
 
 ## R-010 资源与占位贴图
@@ -114,6 +117,22 @@
 - **Decision**: 本牌入手即判负、无法自然停留在手牌，故用**探针版临时关闭「抽到即负」**在开发期实测「不可打出 / 不可被主动消耗」，并与参照牌同条件对照（含持「蓝蜡烛」的一次）；正常版只验判负。该开关只存在于探针构建，随 T035 一并移除，发布版不含。
 - **Rationale**: 直接观察不可打出需要牌停在手牌，正常版不可达；探针 + 参照牌对照兼顾可验证性与发布安全；本轮选择路线 b。
 - **Alternatives considered**: 只做参照牌对照 +「不可达」论证（否决：对 FR-005 的直接验证不足）；在发布版保留调试开关（否决：违背发布洁净与不可被利用）。
+
+## R-014 选项注册、选中状态与文本口径（2026-10-24 实现期实物核对，T007~T014）
+
+- **Decision**:
+  1. 选项 ID 固定 `anthonyswrath:AnthonysWrathOption`，按「运行期型负面修正」注册：`new CustomMod(optionId, "r", true)`（第 2 参数是颜色而非名称；第 3 参数 `isDailyMod=true` 与本体 `Binary` / `Terminal` 等运行期型负面修正一致）。
+  2. 「本局是否选中」唯一来源 = `AbstractPlayer.customMods` 是否包含 optionId（只按标识判定，EC-007）。该静态列表在新开标准局时不会清空，故再与 `Settings.isTrial || CardCrawlGame.trial instanceof CustomTrial` 相与；新档注入额外要求 `CardCrawlGame.trial instanceof CustomTrial`（`run/RunState`）。
+  3. 文本文件 `src/main/resources/strings/anthonyswrath/<lang>/{cards,run_mods}.json`，`<lang>` = `Settings.GameLanguage` 小写值（`eng` / `zhs`），其它语言回退 `eng`；`RunModStrings` 键 = optionId，`CardStrings` 键 = 完整 cardID。
+  4. 中文选项名写入「负面：安东尼之怒」，英文名按规格保持 `Anthony's Wrath`。
+- **Verified（`javap -p -c`：`libs/BaseMod.jar` 5.56.0 + `libs/desktop-1.0.jar` 12-18-2022；方法见 `memory/log/021`，结论已升为 `memory/facts/f015`、`f016`）**:
+  - `CustomMod.<init>(String ID, String color, boolean isDailyMod)`：`this.color = color`、`this.ID = ID`、`name/description = CardCrawlGame.languagePack.getRunModString(ID)`、`this.isDailyMod = isDailyMod`；label = `colorString("[" + name + "]", color) + " " + description`。本体运行期型负面选项（DeadlyEvents / Binary / Cursed Run 等）一律 `color="r"` 且 `isDailyMod=true`；`isDailyMod=false` 的一批（Praise Snecko / One Hit Wonder / My True Form / Starter Deck 等）只在 `CustomModeScreen.addNonDailyMods` 里做开局改写、不进入持久化列表。
+  - 新开自定义局：`CustomModeScreen.updateEmbarkButton` 把 `getActiveDailyModIds()` 交给 `CustomTrial.addDailyMods`，随后 `CardCrawlGame.trial = trial`、`AbstractPlayer.customMods = trial.dailyModIDs()`、`Settings.isTrial = true`。读档：`CardCrawlGame.loadPlayerSave` 恢复 `Settings.isTrial` 并 `AbstractPlayer.customMods = SaveFile.custom_mods`。存档：`SaveFile` 构造器把 `AbstractPlayer.customMods` 写入 `custom_mods` 字段。⇒ `isDailyMod=true` 是「选中状态跨读档保留」的必要条件。
+  - 标准局 / 每日挑战：`CardCrawlGame.updateFade` 的 startOver 分支会 `trial = null`、`Settings.isTrial = false`（标准局安全）；每日挑战走自己的 trial 类型（注入判定用 `instanceof CustomTrial`，安全）。
+  - 文本加载：`BaseMod.loadCustomStringsFile(Type.class, path)` = `Gdx.files.internal(path).readString(UTF-8)` → `loadJsonStrings`；`typeMaps` 把 `CardStrings → cards`、`RunModStrings → mod`。**5.56.0 的 `findCallingModName()` 是 `aconst_null; areturn` 桩**，`loadJsonStrings` 因此不会自动加 `<modId>:` 前缀 ⇒ JSON 键必须是完整 id。
+  - 卡牌注册：`BaseMod.addCard(card)` 按 `CardColor.CURSE` 进 `curseToAdd`，由 `CurseCardsPatch` 在卡库初始化后 `CardLibrary.add(card)`；随后 `AbstractDungeon.initializeCardPools → addCurseCards` 会把它收进 `curseCardPool` ⇒ EC-010 仍需 T027 在 `StartGame` 中排除。
+- **「负面：」前缀结论（T009）**: 本体 `CustomModeScreen`、`localization/*/run_mods.json` 与 `ui.json` 中都没有「负面：」文本，负面性只由红色（`"r"`）方括号表达，界面槽位不提供该前缀。为满足 US1 验收场景 1 的显式文案，中文选项名写入「负面：安东尼之怒」（不会重复）；英文按规格固定为 `Anthony's Wrath`。详见 `memory/log/021`。
+- **Alternatives considered**: 注册为 `isDailyMod=false`（否决：不进 `AbstractPlayer.customMods`，读档后无从判断，只能另造持久化，违背「不新增存档字段」）；读档后按显示名或卡牌是否在牌组反推选中状态（否决：无权威来源，且与 EC-007 冲突）。
 
 ## 风险与兜底（Risks and Fallbacks）
 
