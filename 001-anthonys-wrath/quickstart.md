@@ -34,18 +34,36 @@
 3. 「轮抽（Draft）」等改写开局牌组的选项与开局牌组创建 / 填充的先后顺序。
 4. 参照牌「铃铛的诅咒」在「变化」与「移除」两类操作下的实际表现。
 5. 本体让参照牌「删不掉」的全部判定点（含 `CardGroup.getPurgeableCards()`、净化之泉 `FountainOfCurseRemoval`，以及是否存在不经这两处的移除路径）。
-6. `PostDungeonInitialize` 钩子是否晚于 `AbstractDungeon.initializeCardPools()`。
+6. `PostDungeonInitialize` 钩子是否晚于 `AbstractDungeon.initializeCardPools()`；**读档路径是否触发该钩子**（决定诅咒池排除落点）。
 
 探针输出与结论记入 `memory/log/`；未得出结论前，不得进入对应实现（置底、入手判定、不可移除拦截、诅咒池排除）。
 
-**探针版本（开发期实现，T035 移除）**：代码位于 `src/main/java/<modId>/probe/`（`TimingProbe` 自注册、`ProbePatches` 只读观测、`AwProbeCommand` 控制台命令、`ProbeLog` 双写日志）。日志同时输出到 MTS 控制台与 `%USERPROFILE%\awprobe.log`；控制台（BaseMod Dev Console，反引号键打开）命令：`awprobe info|purge|cursepool|transform <cardID>|addcard <cardID>|shuffledeck`。采集场景：
+**探针版本（开发期实现，T035 移除）**：代码位于 `src/main/java/<modId>/probe/`（`TimingProbe` 自注册、`ProbePatches` 只读观测、`AwProbeCommand` 控制台命令、`ProbeLog` 双写日志）。日志同时输出到 MTS 控制台与 `%USERPROFILE%\awprobe.log`；控制台（BaseMod Dev Console，反引号键打开）命令：
+
+```text
+awprobe info                      局面 / 牌堆 / customMods / curseCardPool
+awprobe purge                     masterDeck.getPurgeableCards() 的输入与输出
+awprobe cursepool                 curseCardPool / srcCurseCardPool
+awprobe find <text>               列出含该文本的 cardID（排错用）
+awprobe addcard <cardID>|bell     masterDeck 加一张副本（bell = CurseOfTheBell）
+awprobe bell                      同 addcard bell，免参数
+awprobe transform <cardID>|bell   调 AbstractDungeon.transformCard 并记录 transformedCard
+awprobe shuffledeck               直接调 player.drawPile.shuffle()（无参洗牌原语）
+```
+
+- 卡 ID 大小写不敏感，`bell` 是 `CurseOfTheBell` 的别名；Tab 补全在参数位给出真实卡 ID（旧版把子命令词填进参数位，导致 `addcard` 收到 `cursepool`，见 `memory/log/018`）。若控制台仍异常，可改用 BaseMod 自带 `deck add CurseOfTheBell`（它走 `ShowCardAndObtainEffect`，与探针的 `masterDeck.addToTop` 语义不同，日志里会体现）。
+- 日志中 `drawPile` 列表**索引 0 = 底部（最后抽到），末位 = 下一次抽到**（`memory/facts/f010`）。
+
+采集场景（已覆盖项保留以便复跑；第二轮从场景 4 的弃牌堆取牌、5、6、7、8 开始）：
 
 1. 新档自定义模式开两局（勾选「轮抽（Draft）」或「Insanity」，再开一局不勾选任何改写牌组的选项）→ 观察 `initializeStarterDeck`、`PostCreateStartingDeck`、`customMods`；
 2. 第一场战斗开局 → `preBattlePrep` / `initializeDeck` / `shuffle` / `StartBattle` / 首次摸牌的先后；
 3. 打到抽牌堆耗尽 → `emptyDeckShuffle` 与 `shuffle(discardPile)`；
-4. 用「搜寻」类效果直接取牌 → `addToTop` / `addToHand` 调用栈；
-5. `awprobe addcard CurseOfTheBell` 后进商店移除 / 休息点移除 / 净化之泉 → `getPurgeableCards`、`removeCard`、`fountain`；
-6. `awprobe transform CurseOfTheBell` 及变化类事件 → `transformCard` 的输入与 `transformedCard` 输出。
+4. 用「搜寻」类效果直接取牌（**抽牌堆与弃牌堆各取一次**）→ `addToTop` / `addToHand` 调用栈；控制台 `awprobe shuffledeck` 观察无参 `shuffle()` 原语（非耗尽重洗方向）；
+5. `awprobe bell`（或 `awprobe addcard bell`）后 `awprobe info`、商店移除 / 休息点移除 / 净化之泉 → `getPurgeableCards`、`removeCard`、`fountain`；
+6. `awprobe transform bell` 及变化类事件 → `transformCard` 的输入与 `transformedCard` 输出；
+7. **R-006 存活实验**：PowerShell 执行 `New-Item -ItemType File -Path "$env:USERPROFILE\awprobe.inject" -Force`，然后开一局 Draft（新档）→ 日志应出现 `probe.inject | marker=AscendersBane`；看 `StartGame` / `PostDungeonInitialize` / 首战 `preBattlePrep` 的 `masterDeck` 里标记牌是否仍在（哨兵文件用后自动删除，每次实验前重建）；
+8. **读档路径**：任一局打到中途 → 存档退出 → 继续 → 观察 `initializeCardPools` 触发而 `PostDungeonInitialize` 不触发（R-007 证据；本牌注册后 T027 再补池内复测）。
 
 跑完后把 `awprobe.log` 交回，结论回写 `research.md` §R-004～§R-008。
 

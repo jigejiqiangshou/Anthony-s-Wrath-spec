@@ -28,7 +28,7 @@
 
 **⚠️ CRITICAL**: 本阶段未完成，任何用户故事都不得进入实现。
 
-- [ ] T004 **前置（一次性人工准备）**：ModTheSpire 加载器与 BaseMod、StSLib 已可用（Steam 创意工坊订阅或手动放入游戏目录 `mods/`），且 ModTheSpire 启动日志的 Mod list 中 `basemod` 与 `stslib` 同时出现、BaseMod 完成初始化；安装证据（订阅清单或启动器日志摘录）记入 `memory/log/`，作为本任务可被执行的判据。编写并运行游戏内时序探针 `src/main/java/<modId>/probe/TimingProbe.java`（仅日志输出）：回答 research.md R-004～R-008 与 quickstart §3 的六个问题——首次洗牌与候选钩子的先后、能覆盖首次洗牌与重洗的置底介入点、效果直接取牌与抽牌的判定点是否同一、「轮抽（Draft）」等改写牌组选项与开局牌组创建 / 填充的先后、参照牌「铃铛的诅咒」在变化 / 移除下的实际表现、`PostDungeonInitialize` 是否晚于 `AbstractCardPools` 初始化；并枚举本体让参照牌「删不掉」的全部判定点，回写 research.md §R-008；探针输出与结论追加到 `memory/log/`（2026-10-24：探针代码已就位 `src/main/java/anthonyswrath/probe/`，含 TimingProbe / AwProbeCommand / ProbePatches / ProbeLog，JDK8 `javac` 编译通过；待用户运行采集数据，见 `memory/log/015`）
+- [ ] T004 **前置（一次性人工准备）**：ModTheSpire 加载器与 BaseMod、StSLib 已可用（Steam 创意工坊订阅或手动放入游戏目录 `mods/`），且 ModTheSpire 启动日志的 Mod list 中 `basemod` 与 `stslib` 同时出现、BaseMod 完成初始化；安装证据（订阅清单或启动器日志摘录）记入 `memory/log/`，作为本任务可被执行的判据。编写并运行游戏内时序探针 `src/main/java/<modId>/probe/TimingProbe.java`（仅日志输出）：回答 research.md R-004～R-008 与 quickstart §3 的六个问题——首次洗牌与候选钩子的先后、能覆盖首次洗牌与重洗的置底介入点、效果直接取牌与抽牌的判定点是否同一、「轮抽（Draft）」等改写牌组选项与开局牌组创建 / 填充的先后、参照牌「铃铛的诅咒」在变化 / 移除下的实际表现、`PostDungeonInitialize` 是否晚于 `AbstractCardPools` 初始化；并枚举本体让参照牌「删不掉」的全部判定点，回写 research.md §R-008；探针输出与结论追加到 `memory/log/`（2026-10-24：探针代码已就位 `src/main/java/anthonyswrath/probe/`，含 TimingProbe / AwProbeCommand / ProbePatches / ProbeLog，JDK8 `javac` 编译通过；待用户运行采集数据，见 `memory/log/015`）（2026-10-24 第二轮采集：`awprobe.log` 654 行覆盖 4 局 / 6 战；R-004 首洗与耗尽重洗时序、R-005 两个入手判定点、R-006 开局注入时序、R-007 钩子时序均已实测并回写 `research.md`；遗留 R-008 场景 5/6、R-004 非耗尽重洗 / 多副本、R-005 弃牌堆取牌、R-006 Draft 存活待补采；探针已修 `addcard` 控制台补全事故并加入 R-006 标记注入实验，见 `memory/log/018`；T004 仍未完成）
 - [ ] T005 [P] 建立双语文本资源骨架 `src/main/resources/strings/<modId>/`：中英 key 一一对应，格式按 BaseMod 实际加载规则在依赖 jar 就绪后核对；本任务只建空骨架与命名约定
 - [ ] T006 [P] 建立 `src/main/java/<modId>/patches/vanilla/` 包骨架与命名约定，供 US5 逐条实现；不可移除判定点清单由 T004 的枚举结论直接回写 `research.md` §R-008，本任务不重复承接该回写
 
@@ -49,7 +49,7 @@
 - [ ] T009 [P] [US1] 在双语资源写入选项显示名「安东尼之怒」与勾选前可见的效果说明文本（`FR-014`），路径 `src/main/resources/strings/<modId>/`；并比对本体负面选项的前缀规则，确认「负面：」前缀由界面槽位提供还是需写入文本、不得重复，结论记入 `memory/log/`
 - [ ] T010 [P] [US1] 实现诅咒牌类 `src/main/java/<modId>/cards/AnthonysWrathCurse.java`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2、`CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例（`FR-004`、`FR-005`）
 - [ ] T011 [US1] 在 `EditCardsSubscriber.receiveEditCards` 中注册诅咒牌并确认游戏将其识别为诅咒（`FR-004`），路径 `src/main/java/<modId>/<ModEntry>.java`
-- [ ] T012 [US1] 实现开局注入 `src/main/java/<modId>/run/StartDeckInjector.java`：实现 `PostCreateStartingDeckSubscriber`，基于 `optionId` 判定本局是否选中，选中则加入恰好一张；注入点在牌组创建之后、首次洗牌之前，具体先后按 T004 结论执行（`FR-002`、`FR-003`；覆盖 `EC-002`：Draft 等改写后的开局牌组）
+- [ ] T012 [US1] 实现开局注入 `src/main/java/<modId>/run/StartDeckInjector.java`：实现 `PostCreateStartingDeckSubscriber`，基于 `optionId` 判定本局是否选中，选中则加入恰好一张；注入点在牌组创建之后、首次洗牌之前，具体先后按 T004 结论执行（`FR-002`、`FR-003`；覆盖 `EC-002`：Draft 等改写后的开局牌组；R-006 实测该钩子早于 Draft 填充与首洗，但注入牌在填充中的存活须先由探针 `awprobe.inject` 实验确认）
 - [ ] T013 [P] [US1] 在双语资源写入诅咒牌名称与描述初版（名称：中文「安东尼之怒」/ 英文 `Anthony's Wrath`），路径 `src/main/resources/strings/<modId>/`；描述定稿由 T033 按参照牌措辞覆盖完成
 - [ ] T014 [US1] 选项标识容错（路线 a）：从存档恢复后的自定义模式项列表读取时忽略未知标识，保证本 mod 加载时对其它未知项健壮；EC-006 的「本 mod 未加载」场景由本体 / BaseMod 负责、QS-14 只作验证（实测崩溃则回 `/speckit-clarify`），路径 `src/main/java/<modId>/options/`
 - [ ] T015 [US1] 实测并记录 US1：选项可见 / 显示名 / 效果说明（QS-01，`FR-014`）、开局牌组恰好一张（QS-02）、改写开局牌组注入（QS-08，Draft 场景，仅验加入与时机）、未加载本 mod 后读档不崩溃（QS-14）；结果追加到 `memory/log/`
@@ -85,7 +85,7 @@
 ### Implementation for User Story 3
 
 - [ ] T021 [US3] 实现入手判定 `src/main/java/<modId>/run/DefeatOnDraw.java`：在取得动作完成时立即触发本局失败，走游戏本体失败流程（`FR-008`、`FR-009`）
-- [ ] T022 [US3] 覆盖「效果直接取牌」路径（`EC-008`）：按 T004 结论与抽牌共用判定点，或另建独立监听；两条路都不可行时停止并回到 `/speckit-clarify`，不得缩减覆盖范围
+- [ ] T022 [US3] 覆盖「效果直接取牌」路径（`EC-008`）：按 R-005 实测实现两个判定点（`CardGroup.addToHand` 与目标为手牌的 `CardGroup.addToTop`），经效果取牌不经过前者，必须由后者覆盖；补采确认弃牌堆取牌路径后定稿
 - [ ] T023 [US3] 加入本局一次性守卫与终局短路：失败只结算一次（`FR-010`），判负后后续抽牌在入口整段跳过、不接受可操作结果（`EC-004`）
 - [ ] T024 [US3] 在入口类接入判定组件；若判定点需拦截原版抽牌动作，补丁放入 `patches/vanilla/`，否则优先使用 BaseMod 既有钩子
 - [ ] T025 [US3] 实测并记录 US3：自然抽到即负（QS-06，`SC-003`）、搜寻取牌判负（QS-07）、多副本只结算一次与终局短路（QS-09）、失败记录（QS-15）、主动放弃不触发特判（QS-16，`EC-005`）；结果追加到 `memory/log/`
@@ -103,7 +103,7 @@
 ### Implementation for User Story 4
 
 - [ ] T026 [US4] 让所有注入 / 置底 / 判负组件在未选中时短路：统一以存档恢复后的自定义模式项列表 + `optionId` 为准（`FR-011`），路径 `src/main/java/<modId>/run/`
-- [ ] T027 [US4] 把本牌排除出随机诅咒池：优先在 `PostDungeonInitializeSubscriber.receivePostDungeonInitialize` 中移出（时序以 T004 结论为准），钩子不可用时改为 `patches/vanilla/` 补丁；记录所选落点（`EC-010`）
+- [ ] T027 [US4] 把本牌排除出随机诅咒池：在 `StartGameSubscriber.receiveStartGame` 中移出（R-007 实测：新档与读档都触发且晚于 `initializeCardPools`；`PostDungeonInitialize` 读档不触发，不可作唯一落点），钩子不可用时改为 `patches/vanilla/` 补丁；记录所选落点（`EC-010`）
 - [ ] T028 [US4] 实测并记录 US4：三种模式未选中时牌组逐张一致、随机诅咒来源不发出本牌（QS-10，`SC-004`）；结果追加到 `memory/log/`
 
 **Checkpoint**: 用户故事 4 可独立验证——未选中路径零扰动。
