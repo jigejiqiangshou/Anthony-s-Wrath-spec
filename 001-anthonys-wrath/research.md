@@ -93,7 +93,8 @@
   - 因此 T027 的落点改为两层：① 卡牌类加 BaseMod `@NoPools`（BaseMod 的 `AbstractDungeon.initializeCardPools` postfix 按注解清空全部池，含 `curseCardPool` / `srcCurseCardPool`，新档与读档都会重建池）；② `patches/vanilla/CardLibraryGetCursePatch` 对两个 `getCurse` 重载做 postfix 重抽（命中本牌则重抽，内层用重入标志返回原始结果，循环上限 64）。`StartGame` 钩子不再承担池排除，只保留 T026 的每局选中态捕获与判负标志重置。
   - **补丁机制要求（2026-10-29，`memory/facts/f024`）**：要替换返回值必须用 `@SpirePatch2` —— MTS 3.30.3 的旧式 `@SpirePatch` postfix 返回值被忽略（`PostfixPatchInfo.returnsValue` 只由 `@SpirePatch2` 的参数映射器设置）；`@SpirePatch2` 的参数按目标方法 LocalVariableTable 里的**参数名**匹配，故 handler 使用目标参数名（`prohibitedCard` / `rng`）并声明 `__result`。MTS 的 `Patcher` 会扫描并用 `convertSpirePatch2To1` 转换 `@SpirePatch2`，该版本可用。
 - **Implemented（2026-10-29）**: `cards/AnthonysWrathCurse` 加 `@NoPools`；`patches/vanilla/CardLibraryGetCursePatch` 两个内部类分别命中 `getCurse()` 与 `getCurse(AbstractCard, Random)`；探针新增 `awprobe curseprobe [n]` 在游戏内采样两个重载并断言 `noArgHits=0 / avoidHits=0 / poolsClean=true`（T028 证据口径）。
-- **Remaining**: T028 游戏内实测（标准 / 每日 / 未勾选自定义三局 + 勾选对照局）；读档路径由同一 `initializeCardPools` 覆盖，`StartGame` 已不复用该假设。
+- **Verified in game（2026-10-29，T028；证据 `memory/log/031`、`quickstart.md` §4 的 T028 结果块）**: 四局（标准 / 每日 / 未勾选自定义 / 勾选对照）`awprobe curseprobe` 全部 `PASS noArgHits=0 avoidHits=0 poolsClean=true`（4×50×2 = 400 次 `getCurse` 调用 0 命中；`curseCardPool` / `srcCurseCardPool` 均只含 10 张原版诅咒）；未选中三局注入钩子前后 `masterDeck` 逐张一致（10 / 50 / 10 张）且洗牌 `tracked={none}`，对照局 10→11 恰好一张、首洗后 `tracked` @7→@0。MTS 进程日志确认 Mod list 含 `anthonyswrath (0.1.0)`，两个 `getCurse` 重载的 `@SpirePatch2` postfix 已应用并生成 `return ($r)…Postfix(...)`（运行期确认 f024）。本段未实际推进到事件 / 宝箱 / 诅咒钥匙，该操作路径补做归入 T041。
+- **Remaining**: 无 T028 待办；QS-10 的「事件 / 遗物实际产出诅咒」实际操作路径留 T041 完整回归补做。读档路径由同一 `initializeCardPools` 覆盖，`StartGame` 已不复用该假设。
 
 ## R-008 不可移除的实现方式
 

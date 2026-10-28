@@ -109,13 +109,13 @@
 
 ### Implementation for User Story 4
 
-> 2026-10-29 实现批次：T026 / T027 已完成并通过 JDK8 `javac` 全量编译、离线 MTS 补丁目标自检 **26/26**、`@NoPools` 反射检查与双语 key 一致性检查（`memory/log/029`）；**T028 待用户实测**（步骤见 `quickstart.md` §4 的 2026-10-29 US4 段）。要点：选中态由 `RunState.beginRun()` 在 `StartGame` 每局捕获一次（`AbstractPlayer.customMods` + `Settings.isTrial` / `CustomTrial` 门禁），置底与判负组件按 FR-011 短路；随机诅咒排除实际落点与 T027 原计划不同——池移除不足以覆盖 `CardLibrary.getCurse()`（本体随机诅咒来源遍历私有 `curses` 映射，不读 `curseCardPool`），故改为「卡牌类加 BaseMod `@NoPools`（清池）+ `CardLibraryGetCursePatch` 过滤两个 `getCurse` 重载（真正的随机来源）」，依据 V2.3.4 反汇编；见 `research.md` §R-007 修正与事实 f023。
+> 2026-10-29 实现批次：T026 / T027 已完成并通过 JDK8 `javac` 全量编译、离线 MTS 补丁目标自检 **26/26**、`@NoPools` 反射检查与双语 key 一致性检查（`memory/log/029`）；**T028 已于 2026-10-29 01:52–02:03 实测通过**（`awprobe.log` 293 行 / 186 事件 / 4 局，判读记录 `memory/log/031`；步骤与结果块见 `quickstart.md` §4 的 2026-10-29 US4 段）。要点：选中态由 `RunState.beginRun()` 在 `StartGame` 每局捕获一次（`AbstractPlayer.customMods` + `Settings.isTrial` / `CustomTrial` 门禁），置底与判负组件按 FR-011 短路；随机诅咒排除实际落点与 T027 原计划不同——池移除不足以覆盖 `CardLibrary.getCurse()`（本体随机诅咒来源遍历私有 `curses` 映射，不读 `curseCardPool`），故改为「卡牌类加 BaseMod `@NoPools`（清池）+ `CardLibraryGetCursePatch` 过滤两个 `getCurse` 重载（真正的随机来源）」，依据 V2.3.4 反汇编；见 `research.md` §R-007 修正与事实 f023。
 
 - [x] T026 [US4] 让所有注入 / 置底 / 判负组件在未选中时短路：统一以存档恢复后的自定义模式项列表 + `optionId` 为准（`FR-011`），路径 `src/main/java/<modId>/run/`（2026-10-29 完成：`RunState.beginRun()` 在 `StartGame` 捕获 `selectedThisRun`（存档恢复后的 `customMods` + `Settings.isTrial`/`CustomTrial` 门禁），`isOptionSelected()` 只返回该每局记录；`DrawPileOrdering.sinkCurseToBottom` 与 `DefeatOnDraw.onCurseEnteredHand` 前置短路；新档注入 `isOptionSelectedForNewRun()` 保持直接的严格判定（`PostCreateStartingDeck` 早于 `StartGame`）。读档路径的 `Settings.isTrial` / `customMods` 由 `CardCrawlGame.loadPlayerSave` 恢复，已用 V2.3.4 字节码复核；见 `memory/log/029`）
 - [x] T027 [US4] 把本牌排除出随机诅咒池：`StartGameSubscriber.receiveStartGame` 原计划的池移除被证伪（本体随机诅咒来源走 `CardLibrary.getCurse()`，不读 `curseCardPool`）；改为「卡牌类 `@NoPools` + `CardLibraryGetCursePatch`（两个 `getCurse` 重载用 `@SpirePatch2` postfix 重抽——旧式 `@SpirePatch` 的返回值会被忽略，见事实 f024）」；落点与新证据记录于 `research.md` §R-007 修正、`memory/log/029` 与事实 f023（`EC-010`）
-- [ ] T028 [US4] 实测并记录 US4：三种模式未选中时牌组逐张一致、随机诅咒来源不发出本牌（QS-10，`SC-004`）；结果追加到 `memory/log/`（2026-10-29：**待用户实测**，步骤见 `quickstart.md` §4 的 2026-10-29 US4 段；命令 `awprobe curseprobe` 为新增的自检入口）
+- [x] T028 [US4] 实测并记录 US4：三种模式未选中时牌组逐张一致、随机诅咒来源不发出本牌（QS-10，`SC-004`）；结果追加到 `memory/log/`（**2026-10-29 01:52–02:03 实测通过**，判读记录 `memory/log/031`：标准 / 每日 / 自定义未勾选三局注入钩子前后 `masterDeck` 逐张一致（10 / 50 / 10 张，无本牌）、`tracked={none}`；`awprobe curseprobe` 四局全 PASS（`noArgHits=0` / `avoidHits=0` / `poolsClean=true`，4×50×2 = 400 次 `getCurse` 采样 0 命中，两池均不含本牌）；勾选对照局 `masterDeck` 10→11 恰好一张、首洗后 `tracked` @7→@0、`curseprobe` 仍 PASS；MTS 日志确认 Mod list 含本 mod 且两个 `getCurse` 重载的 `@SpirePatch2` 已应用。范围说明：本段未实际推进到宝箱 / 诅咒钥匙 / 随机诅咒事件，该操作路径并入 T041 的 QS-10 必做项）
 
-**Checkpoint**: 用户故事 4 可独立验证——未选中路径零扰动。（2026-10-29：T026/T027 实现与离线自检完成，`memory/log/029`；T028 待实测，通过后本 Checkpoint 才算成立）
+**Checkpoint**: 用户故事 4 可独立验证——未选中路径零扰动。（**2026-10-29 通过**：T026/T027 实现与离线自检见 `memory/log/029`；T028 四局实测判读见 `memory/log/031` 与 `quickstart.md` §4 结果块；QS-10 的「事件 / 遗物实际产出诅咒」操作路径补做归入 T041）
 
 ---
 
@@ -150,7 +150,7 @@
 - [ ] T038 构建与加载验收：构建命令成功，`jar tf` 确认产物内含双语资源、贴图与 jar 根 `ModTheSpire.json`，mod 能被 ModTheSpire 正常加载且游戏可启动、日志无异常
 - [ ] T039 验证记录机制定稿：确认「流程 / 记录 / 结论」三级在实战中够用，边界不清处就地修正；记录追加到 `memory/log/`
 - [ ] T040 里程碑校验三层锁定与提交顺序（宪法第七、九条）：三段 gitlink 与各层 HEAD 一一对应、`.gitmodules` 地址可解析；提交顺序为先层后顶层
-- [ ] T041 按 [quickstart.md](./quickstart.md) 完成一次完整回归（QS-01 至 QS-17，覆盖 `SC-001` 至 `SC-005`），逐条记录结果到 `memory/log/`，作为宪法第五条「完成标准」的证据（**QS-14 卸载 / 禁用后读旧档为必做项**：T015 未执行，发布前不得跳过；QS-01/02/08 已于 2026-10-24 通过，见 `memory/log/022`）
+- [ ] T041 按 [quickstart.md](./quickstart.md) 完成一次完整回归（QS-01 至 QS-17，覆盖 `SC-001` 至 `SC-005`），逐条记录结果到 `memory/log/`，作为宪法第五条「完成标准」的证据（**QS-14 卸载 / 禁用后读旧档为必做项**：T015 未执行，发布前不得跳过；QS-01/02/08 已于 2026-10-24 通过，见 `memory/log/022`；**QS-10 的「事件 / 遗物实际产出诅咒」操作路径须在本轮补做**——T028 以 `curseprobe` 源级采样判定通过，见 `memory/log/031`）
 
 ---
 

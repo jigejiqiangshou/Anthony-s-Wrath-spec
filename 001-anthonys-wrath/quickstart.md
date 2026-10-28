@@ -138,7 +138,7 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >
 > **第三方 Mod 干扰（判读陷阱，已排除）**：创意工坊 Mod「快速重开按钮」（`quickRestart`，创意工坊 ID `1805046408`）的「评分重开」在 `receivePostRender` 中调用 `RestartRunHelper.scoreAndRestart()` → 构造 `DeathScreen`（`isDead=false`、探针可见 caller 为 `BaseMod.publishPostRender`，因为探针的 caller 过滤只保留 `com.megacrit` / `basemod` 帧）。本次 #185、#405 即此类；游戏日志同一时刻有 `QuickRestart: Scoring and run restart has been initialized.`，且这两次都没有本牌入手事件。判读以「caller 链是否含本牌入手」+「该局是否有本牌入手记录」为准（详见 `memory/log/028`、事实 f022）。
 
-> 2026-10-29 US4 实现完成（T026：`RunState.beginRun()` 每局捕获一次选中态，置底与判负组件按 FR-011 短路；T027：卡牌类加 BaseMod `@NoPools` + `CardLibraryGetCursePatch` 过滤两个 `CardLibrary.getCurse` 重载；离线自检 26/26 见 `memory/log/029`），**T028 待实测**。实测前必须用普通终端 `mvn package` 重建 jar 并覆盖 `mods/anthonyswrath.jar`、删除旧 `awprobe.log`。
+> 2026-10-29 US4 实现完成（T026：`RunState.beginRun()` 每局捕获一次选中态，置底与判负组件按 FR-011 短路；T027：卡牌类加 BaseMod `@NoPools` + `CardLibraryGetCursePatch` 过滤两个 `CardLibrary.getCurse` 重载；离线自检 26/26 见 `memory/log/029`），**T028 已于 2026-10-29 01:52–02:03 实测通过**（`awprobe.log` 293 行 / 186 事件 / 4 局，判读记录 `memory/log/031`；结果块见本段末尾）。本轮 jar 由普通终端重建：`target/anthonyswrath.jar` 与 `mods/anthonyswrath.jar` 同哈希 `C63C9B46…2DC81`（65 064 B，2026-10-29 01:43:11）；T034 沿用该构建，无需再次重建，执行前删除旧 `awprobe.log`。
 >
 > **T028 步骤**（QS-10，覆盖 SC-004；三局都不勾选本选项）
 >
@@ -149,7 +149,23 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 > 4. **对照（勾选本选项）**：同一份构建再开一局勾选本选项的自定义局，执行 `awprobe curseprobe`。预期仍 `PASS`（勾选与否都不应被随机诅咒来源发出；本牌只能来自开局注入）；`awprobe info` 确认 masterDeck 恰好一张本牌。
 > 5. 结论写入 `memory/log/`：三局 `masterDeck` 前后对照 + 三次 `curseprobe` 输出（QS-10 / SC-004）。
 
-> 2026-10-29 US5 实现完成（T029：`CardGroupGetPurgeableCardsPatch` 过滤全部「可移除候选」；T030：`FountainOfCurseRemovalPatch` + `run/CurseRemovalGuard` 括号式保护净化之泉批量删除；T031：静态枚举确认其余移除路径已被本体自身过滤覆盖，无需额外补丁；T032：`awprobe defeatoff/defeaton` 开发期开关；T033：中英文本定稿核对；离线自检见 `memory/log/030`），**T034 待实测**。实测前同样重建 jar、删除旧 `awprobe.log`。
+> **T028 结果（2026-10-29 01:52–02:03 实测通过，证据 `awprobe.log` 293 行 / 186 事件 / 4 局 + 4 个 `runs/` 记录 + 游戏日志与 MTS 进程日志；判读记录 `memory/log/031`）**
+>
+> | 场景 | 结果 | 证据 |
+> | :--- | :--- | :--- |
+> | 加载自检 | PASS | MTS 日志 `Mod list` 含 `anthonyswrath (0.1.0)`；`CardLibraryGetCursePatch` 两个重载、`CardGroupGetPurgeableCardsPatch`、`FountainOfCurseRemovalPatch` 等均显示 `- SpirePatch2` 并已应用；两处 `getCurse` 调用被改写为 `return ($r)…Postfix(...)`，证明返回值替换在运行期生效；无本 mod 的 MTS 补丁异常（游戏日志仅第三方 Loadout 的 INFO 级 “Error patching …”，历次已记录且不崩溃） |
+> | 标准模式未选中（#4 起） | PASS | #8/#9 注入钩子前后 `masterDeck` 均 10 张且逐张相同、无本牌；#43 `info` 同；#45 `cursepool` / `srcCurseCardPool` 均 10 张原版诅咒、不含本牌；#47 `curseprobe PASS samples=50 noArgHits=0 avoidHits=0 poolsClean=true`；#16/#17 洗牌 `tracked={none}`（置底未介入）；`runs/WATCHER/1793210208.run`：标准局、牌组 10 张、无本牌 |
+> | 每日挑战未选中（#50 起） | PASS | #50 `enabledMods=[Insanity, Time Dilation, Midas]`；#54/#55 钩子前后 `masterDeck` 均 50 张（Insanity 随机开局）且逐张相同、无本牌；#88/#90/#92 同标准局输出；`runs/DAILY/1793210256.run`：`is_daily=true`、`daily_mods` 一致、牌组 50 张无本牌 |
+> | 自定义模式未勾选（#95 起） | PASS | #99/#100 钩子前后均 10 张、逐张相同、无本牌；#134 `tracked={none}`；#136/#138 同标准局输出；`runs/WATCHER/1793210297.run`：`is_trial=true`、牌组 10 张无本牌 |
+> | 对照：勾选本选项（#141 起） | PASS | #146 `masterDeck` 10→11、恰好一张本牌；#153/#154 首洗后 `tracked` 由 @7 → @0（置底生效）；#180 `info` 11 张含恰好一张；#182/#184 同上 PASS；`runs/WATCHER/1793210631.run`：`is_trial=true`、牌组 11 张含恰好一张本牌 |
+>
+> **判读注意（2026-10-29）**
+> 1. 四局均以「放弃本局」结束：四次 `patch.deathScreen.*` 的 caller 链都是 `ConfirmPopup.yesButtonEffect <- SettingsScreen.update`（本体放弃流程），**不是**由本牌触发；本牌入手事件 0 次（控制局本牌位于抽牌堆底部，未抽到）。
+> 2. 本段未实际推进到宝箱 / 诅咒钥匙 / 随机诅咒事件；随机诅咒来源的判据由 `curseprobe` 源级采样承担（4 局 × 50 × 两个 `getCurse` 重载 = 400 次调用，0 命中，两池双清）。本体所有随机诅咒来源都汇聚到这两个重载（事实 f023），该判据比单次事件观察更严格；但「事件 / 遗物实际产出」路径仍列入 T041 完整回归的 QS-10 必做项。
+> 3. 模式归属由 `runs/` 记录交叉确认（`is_daily` / `is_trial` / `daily_mods`），不单凭 `enabledMods` 猜测；四局起始时间与 `playtime` 精确对应（89 / 35 / 26 / 297 秒）。
+> 4. `awprobe.log` #3 的 `registered command:` 行是 `TimingProbe` 硬编码的旧子命令列表，**不能**据此判断 jar 为旧构建（该文本随 T035 删除）。
+
+> 2026-10-29 US5 实现完成（T029：`CardGroupGetPurgeableCardsPatch` 过滤全部「可移除候选」；T030：`FountainOfCurseRemovalPatch` + `run/CurseRemovalGuard` 括号式保护净化之泉批量删除；T031：静态枚举确认其余移除路径已被本体自身过滤覆盖，无需额外补丁；T032：`awprobe defeatoff/defeaton` 开发期开关；T033：中英文本定稿核对；离线自检见 `memory/log/030`），**T034 待实测**（沿用 T028 的同一构建，无需再次重建；执行前删除旧 `awprobe.log`）。
 >
 > **T034 步骤**（QS-11 / QS-12 / QS-13）
 >
