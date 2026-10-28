@@ -100,7 +100,7 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >
 > **遗留观察**：QS-01 的屏幕中文文案仍无截图/记录，留 T041 或下会话顺手复核；#159/#160 净化之泉把本牌从 masterDeck 删除属 US5（T029-T031）未实现的预期缺口，不是 US2 回归。
 
-> 2026-10-24 US3 实现完成（T021~T024：`run/DefeatOnDraw` + `patches/vanilla/CardGroupHandEntryPatch` + `AbstractPlayerDrawPatch` + `StartGame` 重置；离线自检见 `memory/log/027`），**T025 待实测**。本轮 jar 由用户 21:43 重建并放入 `mods/`（已核对与 `target/anthonyswrath.jar` 同哈希），但**该 jar 不含 US3 代码**——执行本段前必须用普通终端重新 `mvn package` 并覆盖 `mods/anthonyswrath.jar`，并删除旧 `awprobe.log`。
+> 2026-10-24 US3 实现完成（T021~T024：`run/DefeatOnDraw` + `patches/vanilla/CardGroupHandEntryPatch` + `AbstractPlayerDrawPatch` + `StartGame` 重置；离线自检见 `memory/log/027`），**T025 已于 2026-10-29 00:04–00:33 实测通过**（`awprobe.log` 727 行、6 局；判读记录 `memory/log/028`）。本轮使用的 jar 为 `target/anthonyswrath.jar` / `mods/anthonyswrath.jar`（2026-10-28 16:10:55，55 600 bytes，SHA256 `5B49071B…4AB8`）。执行本段前仍需用普通终端 `mvn package` 重建并覆盖 `mods/anthonyswrath.jar`（沙箱内 Maven 不可用，事实 f008），并删除旧 `awprobe.log`。
 >
 > **T025 步骤**（全部使用「观者 + 本选项」新档；若用其它角色亦可，步骤不变）
 >
@@ -109,17 +109,60 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >    - **抽牌堆检索（Seek）**：抽出「搜寻」后打出，网格会列出整个抽牌堆，选中「安东尼之怒」并确认。预期：取牌完成瞬间判负；`awprobe.log` 出现 `patch.addToTop(hand) … card=anthonyswrath:AnthonysWrath`，其后接一次 `patch.deathScreen.*`。
 >    - **弃牌堆检索（Hologram）**：先按上文 T041 的 Scry 步骤把本牌从抽牌堆放入弃牌堆，再打「全息影像」从弃牌堆取回本牌。预期：同样判负；日志出现 `patch.addToHand … card=anthonyswrath:AnthonysWrath` 后接一次 `patch.deathScreen.*`。
 >    - **不要用** Secret Technique / Secret Weapon 作样本：它们只能检索技能 / 攻击，本牌是诅咒，取不到。
-> 3. **QS-09 多副本只结算一次 + 终局短路**：用 `awprobe addcard anthonyswrath:AnthonysWrath` 加入第二张副本（下一场战斗生效；首洗后两张副本成组位于 drawPile 索引 0、1，见 QS-05）。核心判据：整份 `awprobe.log` 中 `patch.deathScreen.*` **只成对出现一次**；判负后不再出现新的 `patch.draw(int).before`。
+> 3. **QS-09 多副本只结算一次 + 终局短路**：用 `awprobe addcard anthonyswrath:AnthonysWrath` 加入第二张副本（下一场战斗生效；首洗后两张副本成组位于 drawPile 索引 0、1，见 QS-05）。核心判据：**本局内**（自该局 `hook.PreStartGame` 起至下一次 `hook.PreStartGame` 前）`patch.deathScreen.*` 只成对出现一次；判负后不再出现新的 `patch.draw(int).before`。注意不要按「整份日志只出现一次」判定——QS-06 / QS-07 的日志与它共用同一份 `awprobe.log`（2026-10-29 实测后修正判据，见下方结果块）。
 >    - **基本做法**：把抽牌堆抽到只剩两张（两张本牌），再打一次抽 ≥2 张的牌（如 `awprobe addcard Skim`，「快速浏览」抽 3）或自然抽牌。第一张入手即判负，终局短路使后续抽牌不再发生，不会出现第二次 `deathScreen`。
 >    - **可选（同一动作内两张同时入手，更严格）**：用 `awprobe addcard ThirdEye`（「第三只眼」，Scry 3）在抽牌堆只剩两张本牌时把两张一起放进弃牌堆；再打 `awprobe addcard Meditate`（「冥想」，从弃牌堆取至多 2 张）一次取回两张。预期：仍然只有**一次** `deathScreen`，第二张的判定被一次性守卫拦下。
 >    - 判负后死亡结算界面接管输入，尝试任何操作应无响应。
 > 4. **QS-15 失败记录**：在失败结算界面点「返回主菜单」，到「角色统计 / 游戏记录」确认本局计为失败（loss 计数 +1），游戏日志含 defeat metrics。
-> 5. **QS-16 主动放弃不触发特判**：新开一局，进战斗后不抽到本牌即「保存并退出」/放弃本局。预期：按本体流程处理；该流程中不出现由本牌触发的 `patch.deathScreen.*`（日志中 `deathScreen` 计数保持 0）。
+> 5. **QS-16 主动放弃不触发特判**：新开一局，进战斗后不抽到本牌即「保存并退出」/放弃本局。预期：按本体流程处理；该流程中**没有由本牌触发**的 `patch.deathScreen.*`（判据见下方「判据修正」第 2 条；本体放弃流程自身会构造一条 `DeathScreen`，不算违规）。
 > 6. 顺手复核 QS-01 中文选项屏幕文案（历次遗留项）。
 >
 > **判负证据线**：`patch.deathScreen.before` 的 `isDead=… hp=…` 与 `patch.deathScreen.after` 的 `screen=DEATH` 成对出现即判负落点生效；本牌入手后没有这两行则落点未生效（回传日志排查）。探针的 `patch.addToHand` 行可能早于本 mod 的判负后处理，判读以 `patch.deathScreen.*` 与后续是否还有 `patch.draw(int).before` 为准。
 >
-> **测试可行域变化（US3 之后）**：探针版「抽到本牌不判负」的前提已消失；复现 QS-04 的「抽牌堆耗尽重洗」必须先按上文 T041 步骤用 Scry 把本牌从抽牌堆放入弃牌堆，否则抽空抽牌堆会先抽到本牌并判负。
+> **测试可行域变化（US3 之后）**：探针版「抽到本牌不判负」的前提已消失；复现 QS-04 的「抽牌堆耗尽重洗」必须先按上文 T041 步骤用 Scry 把本牌从抽牌堆放入弃牌堆，否则抽空抽牌堆会先抽到本牌并判负。US5（T034）验证 FR-005 时需要临时关闭判负，用 `awprobe defeatoff` / `awprobe defeaton`（开发期开关，随 T035 移除）。
+
+> **T025 结果（2026-10-29 00:04–00:33 实测通过，证据 `awprobe.log` 727 行 + 用户提供两张游戏记录截图 + 游戏日志 + `runs/WATCHER/*.run`；判读记录 `memory/log/028`）**
+>
+> | 场景 | 结果 | 证据 |
+> | :--- | :--- | :--- |
+> | QS-06 自然抽到即负 | PASS | #73 `patch.addToHand … card=anthonyswrath:AnthonysWrath`（caller `CardGroup.addToHand <- AbstractPlayer.draw`）→ #74 `patch.deathScreen.before`（`isDead=true`，caller 链含 `CardGroup.addToHand`）→ #75 `after screen=DEATH`，恰好一次 |
+> | QS-07 抽牌堆检索（Seek） | PASS | #144 `patch.addToTop(hand) … card=anthonyswrath:AnthonysWrath`（caller `BetterDrawPileToHandAction`；即「搜寻」的 `SeekAction` 路径）→ #145/#146 成对 |
+> | QS-07 弃牌堆检索（Hologram） | PASS | #359 `patch.addToHand … card=anthonyswrath:AnthonysWrath`（caller `BetterDiscardPileToHandAction`）→ #360/#361 成对 |
+> | QS-09 多副本只结算一次 + 终局短路 | PASS | #494 第一张入手 → #495/#496 成对；#498 同一次「冥想」取回的第二张只产生 `patch.addToHand`、**没有**第二次 `deathScreen`（一次性守卫生效）；判负后至下一次 `PreStartGame` 没有新的 `patch.draw(int).before` |
+> | QS-15 失败记录 | PASS | 截图两条游戏记录（`00:28-5` / `00:30-5`）与 `runs/WATCHER/1793204894.run`、`1793205055.run` 一致：`floor_reached=1`、`victory=false`、`score=5`、牌组含两张本牌；`1793205200.run` 为主动放弃局（同样记负） |
+> | QS-16 主动放弃不触发特判 | PASS（判据已修正） | #308/#309 与 #540/#541 的 `deathScreen` 由本体放弃流程 `ConfirmPopup.yesButtonEffect` 构造（本体行为：放弃即失败结算并记负）；全程没有 caller 链含 `CardGroup.addToHand` / `addToTop` 的、由本牌触发的 `deathScreen` |
+>
+> **判据修正（2026-10-29 实测发现原判据不可执行）**
+> 1. QS-09 原判据「整份 `awprobe.log` 中 `patch.deathScreen.*` 只成对出现一次」与本段其它步骤共用同一份日志矛盾（QS-06 / QS-07 也会产出成对记录）。正确判据为**按局**：自该局 `hook.PreStartGame` 起至下一次 `hook.PreStartGame` 前，`patch.deathScreen.*` 只成对出现一次。
+> 2. QS-16 原判据「日志中 `deathScreen` 计数保持 0」与本体行为矛盾：核塔 1 的「放弃本局」本身就会构造 `DeathScreen` 并记负（本次实测 `ConfirmPopup.yesButtonEffect` 调用链 + 运行记录双证）。正确判据为**由本牌触发**的 `deathScreen` 为 0，即没有任何一条 `deathScreen` 的 caller 链含 `CardGroup.addToHand` / `CardGroup.addToTop`，且该局没有本牌入手事件。
+>
+> **第三方 Mod 干扰（判读陷阱，已排除）**：创意工坊 Mod「快速重开按钮」（`quickRestart`，创意工坊 ID `1805046408`）的「评分重开」在 `receivePostRender` 中调用 `RestartRunHelper.scoreAndRestart()` → 构造 `DeathScreen`（`isDead=false`、探针可见 caller 为 `BaseMod.publishPostRender`，因为探针的 caller 过滤只保留 `com.megacrit` / `basemod` 帧）。本次 #185、#405 即此类；游戏日志同一时刻有 `QuickRestart: Scoring and run restart has been initialized.`，且这两次都没有本牌入手事件。判读以「caller 链是否含本牌入手」+「该局是否有本牌入手记录」为准（详见 `memory/log/028`、事实 f022）。
+
+> 2026-10-29 US4 实现完成（T026：`RunState.beginRun()` 每局捕获一次选中态，置底与判负组件按 FR-011 短路；T027：卡牌类加 BaseMod `@NoPools` + `CardLibraryGetCursePatch` 过滤两个 `CardLibrary.getCurse` 重载；离线自检 26/26 见 `memory/log/029`），**T028 待实测**。实测前必须用普通终端 `mvn package` 重建 jar 并覆盖 `mods/anthonyswrath.jar`、删除旧 `awprobe.log`。
+>
+> **T028 步骤**（QS-10，覆盖 SC-004；三局都不勾选本选项）
+>
+> 0. **加载自检**：启动游戏后先确认 Mod list 含 `anthonyswrath (0.1.0)`、MTS 控制台 / 游戏日志没有本 mod 的 patch 报错。本轮 T027 / T029 首次使用 `@SpirePatch2`（MTS 3.30.3 支持；若加载器报 `PatchingException` 或 mod 未出现在 Mod list，先停止测试并回传日志）。
+> 1. **标准模式**：主菜单「标准模式」开一局（任意角色，不要选自定义）。进首战后依次执行 `awprobe info`、`awprobe cursepool`、`awprobe curseprobe`（默认采样 50 次，两个 `getCurse` 重载各半）。预期：`masterDeck` 与未安装本 mod 时逐张一致（无 `anthonyswrath:AnthonysWrath`）；`cursepool` / `srcCurseCardPool` 都不含本牌；`curseprobe` 输出 `PASS … noArgHits=0 avoidHits=0 poolsClean=true`。随后正常推进到宝箱 / 诅咒钥匙 / 随机诅咒事件，确认不会出现本牌（QS-10 场景 4）。
+> 2. **每日挑战**：主菜单「每日挑战」开一局，重复第 1 步的三条命令。预期同上；自定义模式选项不出现在每日挑战（QS-10 场景 2）。
+> 3. **自定义模式（勾选本选项之外的自定义组合）**：自定义模式开一局，选项列表确认「负面：安东尼之怒」可见但**未勾选**，开始后重复第 1 步三条命令。预期：牌组无本牌、`drawPile` 的 `tracked={none}`（置底不介入）、正常战斗不会因本牌判负（本牌不存在）、随机诅咒来源不出本牌。
+> 4. **对照（勾选本选项）**：同一份构建再开一局勾选本选项的自定义局，执行 `awprobe curseprobe`。预期仍 `PASS`（勾选与否都不应被随机诅咒来源发出；本牌只能来自开局注入）；`awprobe info` 确认 masterDeck 恰好一张本牌。
+> 5. 结论写入 `memory/log/`：三局 `masterDeck` 前后对照 + 三次 `curseprobe` 输出（QS-10 / SC-004）。
+
+> 2026-10-29 US5 实现完成（T029：`CardGroupGetPurgeableCardsPatch` 过滤全部「可移除候选」；T030：`FountainOfCurseRemovalPatch` + `run/CurseRemovalGuard` 括号式保护净化之泉批量删除；T031：静态枚举确认其余移除路径已被本体自身过滤覆盖，无需额外补丁；T032：`awprobe defeatoff/defeaton` 开发期开关；T033：中英文本定稿核对；离线自检见 `memory/log/030`），**T034 待实测**。实测前同样重建 jar、删除旧 `awprobe.log`。
+>
+> **T034 步骤**（QS-11 / QS-12 / QS-13）
+>
+> 0. **加载自检**：同 T028 第 0 步（确认 mod 加载与 patch 无报错，重点看 `@SpirePatch2` 的 `getCurse` / `getPurgeableCards` 补丁）。
+> 1. **候选列表（QS-11，T029）**：任意「观者 + 本选项」局（牌组含本牌）中执行 `awprobe purgetest`。预期 `PASS inDeck=true inPurgeable=false`。再进入商店移除界面（地图走到的商店）：候选网格中不应出现「安东尼之怒」；持有 Peace Pipe 时在休息点的移除候选同样不应出现；遗物 / 事件类移除（如 Empty Cage / Astrolabe / Cleric）候选同样不含本牌。
+> 2. **净化之泉（QS-11，T030）**：用控制台 `event Fountain_of_Cleansing` 进入「净化之泉」事件（控制台命令见 BaseMod；若不可用则自然刷出），选择「清除全部诅咒」。预期：本牌不被删除——事件结束后执行 `awprobe info` / `awprobe purgetest`，`masterDeck` 仍含本牌；`awprobe.log` 中没有 `patch.removeCard(obj) … card=anthonyswrath:AnthonysWrath` 行。注意 `patch.fountain.before/after` 与 mod 保护补丁的先后由 MTS 决定，**判读以事件结束后的 `awprobe` 命令输出为准**。
+> 3. **变化 / 蓝蜡烛对照（QS-12，T032；需要开发期开关）**：先 `awprobe defeatoff` 关闭「抽到即负」（探针构建专用，随 T035 移除）。进战斗后正常抽牌直到本牌入手（或用 `awprobe addcard anthonyswrath:AnthonysWrath` 后再抽），确认本牌停在手牌而不是结束本局。
+>    - **不可打出**：本牌与参照牌（`awprobe bell` 加入后抽到）在手中都不可打出（费用 -2 的诅咒，点击无响应 / 不可用提示）；两者表现一致。
+>    - **蓝蜡烛对照**：控制台 `relic BlueCandle`（或自然获得蓝蜡烛）后，本牌与参照牌都可以按本体规则以 1 点生命打出并在战斗中消耗；两者表现一致。
+>    - **主动消耗对照**：`awprobe addcard FiendFire`（恶魔之焰，消耗手牌）后打出，本牌与参照牌同样被消耗、不写回牌组。
+>    - **变化对照**：`awprobe transform anthonyswrath:AnthonysWrath` 与 `awprobe transform bell`——两者结果都只会是「其它随机诅咒」，本牌与参照牌都**不会**作为变化结果出现（`awprobe transform` 只计算并记录结果，不写回牌组，与 T004 相同）。`awprobe curseprobe` 也应保持 PASS。
+>    - 验证结束后执行 `awprobe defeaton` 恢复判负，并按 QS-06 的方式再自然抽一次确认判负回归（只结算一次）。
+> 4. **文本与 key（QS-13，T033）**：切换中英文查看牌面：中文描述「不能被打出。 NL 不能从牌组中移除。」、英文 `Unplayable. NL Cannot be removed from your deck.`，与参照牌「铃铛的诅咒」同款措辞、无关键词样式或颜色标记；两张 `strings/` 的 key 一一对应（离线已核对，见 `memory/log/030`）。
 
 | 编号 | 对应需求 | 操作 | 预期 |
 | :--- | :--- | :--- | :--- |

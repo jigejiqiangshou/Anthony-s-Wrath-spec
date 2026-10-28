@@ -88,16 +88,16 @@
 
 ### Implementation for User Story 3
 
-> 2026-10-24 实现批次：T021～T024 已完成并通过 JDK8 `javac` 全量编译、离线 MTS 补丁目标自检 22/22 与一次性守卫离线测试 8/8（`memory/log/027`）；**T025 游戏内实测待用户执行**（步骤见 `quickstart.md` §4 的 2026-10-24 US3 段）。实现要点：判负落点复用本体失败流程——按 `AbstractPlayer.damage` 字节码的死亡分支（V2.3.4 偏移 1102~1136）执行 `isDead=true` → `AbstractDungeon.deathScreen = new DeathScreen(getMonsters())` → `currentHealth=0` → `loseBlock()`，不调用 `damage()`（否则蜥蜴尾 / 妖精药水等复活资源会拦下判负，违反 FR-008）；两个入手判定点落 `patches/vanilla/CardGroupHandEntryPatch`（`addToHand` postfix + 目标为手牌的 `addToTop` postfix，R-005 / f013）；一次性守卫 `RunState.tryMarkDefeated()`，终局短路为 `patches/vanilla/AbstractPlayerDrawPatch`（`draw(int)` prefix 在判负后整段跳过，EC-004）；`StartGame` 订阅只负责每局起点重置运行期标志（T027 将在此钩子追加诅咒池排除）。
+> 2026-10-24 实现批次：T021～T024 已完成并通过 JDK8 `javac` 全量编译、离线 MTS 补丁目标自检 22/22 与一次性守卫离线测试 8/8（`memory/log/027`）；**T025 已于 2026-10-29 实测通过**（`memory/log/028`，判据修正与第三方 Mod 判读陷阱见 `quickstart.md` §4 结果块）。实现要点：判负落点复用本体失败流程——按 `AbstractPlayer.damage` 字节码的死亡分支（V2.3.4 偏移 1102~1136）执行 `isDead=true` → `AbstractDungeon.deathScreen = new DeathScreen(getMonsters())` → `currentHealth=0` → `loseBlock()`，不调用 `damage()`（否则蜥蜴尾 / 妖精药水等复活资源会拦下判负，违反 FR-008）；两个入手判定点落 `patches/vanilla/CardGroupHandEntryPatch`（`addToHand` postfix + 目标为手牌的 `addToTop` postfix，R-005 / f013）；一次性守卫 `RunState.tryMarkDefeated()`，终局短路为 `patches/vanilla/AbstractPlayerDrawPatch`（`draw(int)` prefix 在判负后整段跳过，EC-004）；`StartGame` 订阅只负责每局起点重置运行期标志（T027 将在此钩子追加诅咒池排除）。
 
 - [x] T021 [US3] 实现入手判定 `src/main/java/<modId>/run/DefeatOnDraw.java`：在取得动作完成时立即触发本局失败，走游戏本体失败流程（`FR-008`、`FR-009`）（2026-10-24 完成：`DefeatOnDraw.onCurseEnteredHand(AbstractCard)` 只判定本牌 cardID；`RunState.tryMarkDefeated()` 置一次性守卫后，按本体 `AbstractPlayer.damage` 的死亡分支执行 `player.isDead=true` → `new DeathScreen(AbstractDungeon.getMonsters())` → `currentHealth=0` → `loseBlock()`；`DeathScreen` 构造器承担 screen=DEATH、角色失败统计、失败 metrics、存档处理与返回主菜单按钮，FR-009 的可见失败结算与失败记录均走本体流程。**否决** `player.damage(...)`：同一方法的复活分支（Lizard Tail / Fairy Potion / Mark of the Bloom，偏移 960~1101）会把致命伤变成回复，判负将不成立。判负落点与选择理由见 `research.md` §R-005 Implemented 与 `memory/log/027`）
 - [x] T022 [US3] 覆盖「效果直接取牌」路径（`EC-008`）：按 R-005 实测实现两个判定点（`CardGroup.addToHand` 与目标为手牌的 `CardGroup.addToTop`）；抽牌堆检索走后者、弃牌堆取牌（Meditate）走前者，两判定点已覆盖全部实测通道（`memory/facts/f013`）（2026-10-24 完成：`patches/vanilla/CardGroupHandEntryPatch` 两个 postfix 静态内部类；`addToHand` 覆盖普通抽牌 / 临时牌 / 弃牌堆取牌，`addToTop` 仅在 `__instance == player.hand` 时判定，覆盖抽牌堆检索与 Retain；两处均只把命中的本牌交给 `DefeatOnDraw`，其它卡牌行为不变。离线自检确认两个补丁精确命中目标方法）
 - [x] T023 [US3] 加入本局一次性守卫与终局短路：失败只结算一次（`FR-010`），判负后后续抽牌在入口整段跳过、不接受可操作结果（`EC-004`）（2026-10-24 完成：`RunState` 新增 `defeated` / `defeatGuard` 与 `isDefeated()` / `tryMarkDefeated()` / `resetDefeatState()`；多副本同时入手时第二次判定直接返回，只结算一次；`patches/vanilla/AbstractPlayerDrawPatch` 以 `SpireReturn` prefix 在 `isDefeated()` 时跳过 `AbstractPlayer.draw(int)` 整个方法体（后续抽牌入口级短路）；判负后本体 `screen=DEATH` 只更新 `DeathScreen`、不再更新战斗与操作，玩家无法再操作。守卫语义离线测试 8/8 通过）
 - [x] T024 [US3] 在入口类接入判定组件；若判定点需拦截原版抽牌动作，补丁放入 `patches/vanilla/`，否则优先使用 BaseMod 既有钩子（2026-10-24 完成：判定点与短路均为原版方法拦截，按约定放 `patches/vanilla/`（`CardGroupHandEntryPatch` / `AbstractPlayerDrawPatch`），由 ModTheSpire 加载时自动应用，入口类不额外注册；入口类唯一的 US3 变更是 `implements StartGameSubscriber` 并在 `receiveStartGame()` 调 `RunState.resetDefeatState()`——新档与读档都触发该钩子（R-007），供 T027 在此追加诅咒池排除；javadoc 已写明该分工）
-- [ ] T025 [US3] 实测并记录 US3：自然抽到即负（QS-06，`SC-003`）、搜寻取牌判负（QS-07）、多副本只结算一次与终局短路（QS-09）、失败记录（QS-15）、主动放弃不触发特判（QS-16，`EC-005`）；结果追加到 `memory/log/`（2026-10-24：**待用户实测**，jar 已由用户重建并放入 `mods/`；步骤与预期见 `quickstart.md` §4 的 2026-10-24 US3 段，证据判读用 `awprobe.log` 新增的 `patch.deathScreen.*` 两条日志）
+- [x] T025 [US3] 实测并记录 US3：自然抽到即负（QS-06，`SC-003`）、搜寻取牌判负（QS-07）、多副本只结算一次与终局短路（QS-09）、失败记录（QS-15）、主动放弃不触发特判（QS-16，`EC-005`）；结果追加到 `memory/log/`（**2026-10-29 00:04–00:33 实测通过**，`awprobe.log` 727 行 / 6 局；判读记录 `memory/log/028`。QS-06 #73→#74/#75；QS-07 抽牌堆检索 #144→#145/#146、弃牌堆检索 #359→#360/#361；QS-09 同一次「冥想」双副本 #494→#495/#496 只成对一次、第二张 #498 无第二次 `deathScreen`、判负后无新 `draw`；QS-15 两张游戏记录截图 + `runs/WATCHER/1793204894.run` / `1793205055.run`（`victory=false`、floor 1、score 5）；QS-16 本体放弃流程自身构造 `DeathScreen`（`ConfirmPopup.yesButtonEffect`），无本牌触发的 `deathScreen`。**判据修正**：QS-09 改为按局判定、QS-16 改为「由本牌触发」判定，并补记第三方「快速重开按钮」的评分重开会构造 `DeathScreen` 的判读陷阱；见 `quickstart.md` §4 的 2026-10-29 结果块与事实 f022）
 
 
-**Checkpoint**: 用户故事 3 可独立验证——抽到即负、只结算一次、失败入记录。（2026-10-24：T021~T024 实现完成，`memory/log/027`；T025 待用户实测，通过后本 Checkpoint 才算成立）
+**Checkpoint**: 用户故事 3 可独立验证——抽到即负、只结算一次、失败入记录。（**2026-10-29 通过**：T021~T024 实现见 `memory/log/027`；T025 实测六项判据全部满足，见 `memory/log/028` 与 `quickstart.md` §4 结果块）
 
 ---
 
@@ -109,11 +109,13 @@
 
 ### Implementation for User Story 4
 
-- [ ] T026 [US4] 让所有注入 / 置底 / 判负组件在未选中时短路：统一以存档恢复后的自定义模式项列表 + `optionId` 为准（`FR-011`），路径 `src/main/java/<modId>/run/`
-- [ ] T027 [US4] 把本牌排除出随机诅咒池：在 `StartGameSubscriber.receiveStartGame` 中移出（R-007 实测：新档与读档都触发且晚于 `initializeCardPools`；`PostDungeonInitialize` 读档不触发，不可作唯一落点），钩子不可用时改为 `patches/vanilla/` 补丁；记录所选落点（`EC-010`）
-- [ ] T028 [US4] 实测并记录 US4：三种模式未选中时牌组逐张一致、随机诅咒来源不发出本牌（QS-10，`SC-004`）；结果追加到 `memory/log/`
+> 2026-10-29 实现批次：T026 / T027 已完成并通过 JDK8 `javac` 全量编译、离线 MTS 补丁目标自检 **26/26**、`@NoPools` 反射检查与双语 key 一致性检查（`memory/log/029`）；**T028 待用户实测**（步骤见 `quickstart.md` §4 的 2026-10-29 US4 段）。要点：选中态由 `RunState.beginRun()` 在 `StartGame` 每局捕获一次（`AbstractPlayer.customMods` + `Settings.isTrial` / `CustomTrial` 门禁），置底与判负组件按 FR-011 短路；随机诅咒排除实际落点与 T027 原计划不同——池移除不足以覆盖 `CardLibrary.getCurse()`（本体随机诅咒来源遍历私有 `curses` 映射，不读 `curseCardPool`），故改为「卡牌类加 BaseMod `@NoPools`（清池）+ `CardLibraryGetCursePatch` 过滤两个 `getCurse` 重载（真正的随机来源）」，依据 V2.3.4 反汇编；见 `research.md` §R-007 修正与事实 f023。
 
-**Checkpoint**: 用户故事 4 可独立验证——未选中路径零扰动。
+- [x] T026 [US4] 让所有注入 / 置底 / 判负组件在未选中时短路：统一以存档恢复后的自定义模式项列表 + `optionId` 为准（`FR-011`），路径 `src/main/java/<modId>/run/`（2026-10-29 完成：`RunState.beginRun()` 在 `StartGame` 捕获 `selectedThisRun`（存档恢复后的 `customMods` + `Settings.isTrial`/`CustomTrial` 门禁），`isOptionSelected()` 只返回该每局记录；`DrawPileOrdering.sinkCurseToBottom` 与 `DefeatOnDraw.onCurseEnteredHand` 前置短路；新档注入 `isOptionSelectedForNewRun()` 保持直接的严格判定（`PostCreateStartingDeck` 早于 `StartGame`）。读档路径的 `Settings.isTrial` / `customMods` 由 `CardCrawlGame.loadPlayerSave` 恢复，已用 V2.3.4 字节码复核；见 `memory/log/029`）
+- [x] T027 [US4] 把本牌排除出随机诅咒池：`StartGameSubscriber.receiveStartGame` 原计划的池移除被证伪（本体随机诅咒来源走 `CardLibrary.getCurse()`，不读 `curseCardPool`）；改为「卡牌类 `@NoPools` + `CardLibraryGetCursePatch`（两个 `getCurse` 重载用 `@SpirePatch2` postfix 重抽——旧式 `@SpirePatch` 的返回值会被忽略，见事实 f024）」；落点与新证据记录于 `research.md` §R-007 修正、`memory/log/029` 与事实 f023（`EC-010`）
+- [ ] T028 [US4] 实测并记录 US4：三种模式未选中时牌组逐张一致、随机诅咒来源不发出本牌（QS-10，`SC-004`）；结果追加到 `memory/log/`（2026-10-29：**待用户实测**，步骤见 `quickstart.md` §4 的 2026-10-29 US4 段；命令 `awprobe curseprobe` 为新增的自检入口）
+
+**Checkpoint**: 用户故事 4 可独立验证——未选中路径零扰动。（2026-10-29：T026/T027 实现与离线自检完成，`memory/log/029`；T028 待实测，通过后本 Checkpoint 才算成立）
 
 ---
 
@@ -125,14 +127,16 @@
 
 ### Implementation for User Story 5
 
-- [ ] T029 [US5] 实现不可移除拦截 ①：在 `patches/vanilla/` 中过滤 `CardGroup.getPurgeableCards()` 的返回结果，覆盖商店移除、休息点、遗物与事件候选列表（`FR-012`、`EC-009`）
-- [ ] T030 [US5] 实现不可移除拦截 ②：令净化之泉 `FountainOfCurseRemoval` 的批量删除循环跳过本牌，路径 `src/main/java/<modId>/patches/vanilla/`
-- [ ] T031 [US5] 按 T004 枚举出的其余移除路径逐条补齐拦截，只判定本牌 cardID，不改变原版对其它卡牌的处理
-- [ ] T032 [US5] 对齐「变化」与「消耗类效果」行为（路线 b）：在探针版临时关闭「抽到即负」后验证手牌中不可打出、不可被主动消耗，并与参照牌同条件对照（含「蓝蜡烛」一次），不增加限制也不放宽（`EC-003`、`EC-011`）；开关仅开发期存在、随 T035 移除，发布版不含
-- [ ] T033 [P] [US5] 在双语资源定稿牌面描述（覆盖 T013 初版）：按参照牌「铃铛的诅咒」措辞直接写明「不能被打出」「不能从牌组中移除」，不使用关键词样式或颜色标记（`FR-013`）
-- [ ] T034 [US5] 实测并记录 US5：三类移除场景（QS-11）、变化 / 蓝蜡烛对照（QS-12，探针版临时关闭判负）、中英牌面文本与 key 一一对应（QS-13），覆盖 `SC-005`；结果追加到 `memory/log/`
+> 2026-10-29 实现批次：T029～T033 已完成并通过 JDK8 `javac` 全量编译与离线 MTS 补丁目标自检 26/26（`memory/log/030`）；**T034 待用户实测**（步骤见 `quickstart.md` §4 的 2026-10-29 US5 段）。要点：T029 在 `CardGroup.getPurgeableCards()` postfix 过滤本牌，覆盖商店 / 休息点 / 遗物 / 事件的全部候选列表（本体给参照牌做硬编码排除的同一方法）；T030 因净化之泉 `buttonEffect` 自建循环绕过候选列表，用 prefix/postfix 括号把本牌临时移出 masterDeck（循环因此看不到它、也不显示 PurgeCardEffect 与记 metric），调用后原位置放回；T031 对 V2.3.4 全库移除入口的静态枚举结论是：除上述两类外其余路径要么调用 `getPurgeableCards()`，要么本体自身按类型 / 稀有度排除诅咒（Falling 只取 attack/skill/power、WeMeetAgain 只取非 BASIC 非 CURSE、Vampires 只移除 Strikes、`removeCard(String)` 仅用于变化），无需额外补丁；T032 的 `awprobe defeatoff/defeaton` 只存在于探针构建，随 T035 移除。
 
-**Checkpoint**: 用户故事 5 可独立验证——所有移除入口都拒绝该牌，文本与参照牌一致。
+- [x] T029 [US5] 实现不可移除拦截 ①：在 `patches/vanilla/` 中过滤 `CardGroup.getPurgeableCards()` 的返回结果，覆盖商店移除、休息点、遗物与事件候选列表（`FR-012`、`EC-009`）（2026-10-29 完成：`patches/vanilla/CardGroupGetPurgeableCardsPatch` 的 `@SpirePatch2` postfix 返回过滤后的 `CardGroup`，只判定本牌 cardID、保持其它卡牌顺序；离线补丁目标自检命中 `CardGroup.getPurgeableCards`；见 `memory/log/030`）
+- [x] T030 [US5] 实现不可移除拦截 ②：令净化之泉 `FountainOfCurseRemoval` 的批量删除循环跳过本牌，路径 `src/main/java/<modId>/patches/vanilla/`（2026-10-29 完成：`patches/vanilla/FountainOfCurseRemovalPatch` 在 `buttonEffect(int)` 上用 prefix/postfix 括号调用 `run/CurseRemovalGuard.suspendFromMasterDeck()` / `restoreToMasterDeck()`；本牌在循环期间不在 masterDeck，因此不被删除、不产生 PurgeCardEffect、不进入事件 metric，调用后按原索引放回；多项副本按原索引升序恢复。依据 V2.3.4 反汇编确认该方法自建 `masterDeck.group` 循环并硬编码跳过三张参照牌；见 `memory/log/030`）
+- [x] T031 [US5] 按 T004 枚举出的其余移除路径逐条补齐拦截，只判定本牌 cardID，不改变原版对其它卡牌的处理（2026-10-29 完成：对 V2.3.4 `desktop-1.0.jar` 做 `masterDeck` + `removeCard` 常量池扫描（25 个类）并逐类 `javap` 归并调用点：商店 / 休息点 / 遗物 / 事件候选均经 `getPurgeableCards()`（T029 已覆盖）、净化之泉自建循环（T030 已覆盖）、其余直接删除点由本体自身按类型或稀有度筛选（Falling 用 `CardHelper.returnCardOfType` 只取攻击/技能/能力；WeMeetAgain 的 `getRandomNonBasicCard` 排除 BASIC 与 CURSE；Vampires 只移除 Strikes；`CardGroup.removeCard(String)` 仅被 `AbstractDungeon.srcTransformCard` 用于变化，属 EC-003 允许路径，不得拦截），因此**无需额外补丁**。枚举明细与依据见 `research.md` §R-008 与 `memory/log/030`）
+- [x] T032 [US5] 对齐「变化」与「消耗类效果」行为（路线 b）：在探针版临时关闭「抽到即负」后验证手牌中不可打出、不可被主动消耗，并与参照牌同条件对照（含「蓝蜡烛」一次），不增加限制也不放宽（`EC-003`、`EC-011`）；开关仅开发期存在、随 T035 移除，发布版不含（2026-10-29 完成实现：`RunState.isDefeatSuspendedForProbe()` 与 `awprobe defeatoff` / `awprobe defeaton`；`DefeatOnDraw` 在开关打开时直接返回。实测属 T034（`quickstart.md` §4 的 2026-10-29 US5 段第 3 步）；发布版由 T035 删除开关）
+- [x] T033 [P] [US5] 在双语资源定稿牌面描述（覆盖 T013 初版）：按参照牌「铃铛的诅咒」措辞直接写明「不能被打出」「不能从牌组中移除」，不使用关键词样式或颜色标记（`FR-013`）（2026-10-29 完成核对：中英文本与本体 `localization/eng/cards.json` / `zhs/cards.json` 的 `CurseOfTheBell` 措辞一致——中文「不能被打出。 NL 不能从牌组中移除。」、英文 `Unplayable. NL Cannot be removed from your deck.`；两份 `cards.json` / `run_mods.json` 的 key 集合离线核对为一一对应；见 `memory/log/030`）
+- [ ] T034 [US5] 实测并记录 US5：三类移除场景（QS-11）、变化 / 蓝蜡烛对照（QS-12，探针版临时关闭判负）、中英牌面文本与 key 一一对应（QS-13），覆盖 `SC-005`；结果追加到 `memory/log/`（2026-10-29：**待用户实测**，步骤见 `quickstart.md` §4 的 2026-10-29 US5 段；命令 `awprobe purgetest` 为新增的自检入口）
+
+**Checkpoint**: 用户故事 5 可独立验证——所有移除入口都拒绝该牌，文本与参照牌一致。（2026-10-29：T029~T033 实现与离线自检完成，`memory/log/030`；T034 待实测，通过后本 Checkpoint 才算成立）
 
 ---
 
