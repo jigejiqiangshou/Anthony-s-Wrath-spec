@@ -16,6 +16,8 @@
 2. 用 `jar tf <jar>` 检查产物：包含 `strings/` 下中英双语资源、诅咒牌贴图 `anthonyswrath/img/cards/AnthonysWrath.jpg`、jar 根 `ModTheSpire.json`；不含游戏本体图片与任何占位图的意外泄漏（如 `placeholder/`）。
 3. 把 jar 放入游戏目录 `mods/`（不存在则新建；创意工坊方式下本地 mod 仍从该目录加载），启动游戏：加载日志无异常，mod 列表中出现本 mod，游戏可正常进入主菜单。
 
+> **2026-11-05 产物实测（T038）**：`target/anthonyswrath.jar` 与游戏 `mods/anthonyswrath.jar` 同哈希 `BBF6C534…D3AC`（113,394 B，01:17:18）；含两张贴图、四份双语资源与根 `ModTheSpire.json`。`jar tf` 另有一个**空** `placeholder/` 目录条目（旧 `target/classes` 构建残留，无图片，不构成占位图泄漏；用 `mvn clean package` 重建即消失）。
+
 ## 3. 时序探针（实现前置）
 
 > **2026-11-04（T035）**：探针（`probe/` 与 `awprobe` 控制台命令、临时关闭判负的开关）已从发布版删除，本节保留为历史复现说明——需要复跑探针时请从 Git 历史取回 `probe/` 或回退 T035 的删除提交。**发布版的 T041 回归按 §4 的 QS 表用游戏内手段执行**（冰冻之眼 / 开发者控制台 / 本体存档）；§4 中标为 `awprobe` 的段落是探针版实测记录，不是发布版可执行步骤。
@@ -199,6 +201,14 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >
 > **留证缺口（不阻塞）**：参照牌「铃铛的诅咒」的「不可打出 / 蓝蜡烛 / 恶魔之焰」同条件对照未单独留证（bell 在 23:44 后才入牌组，boss 战与本牌同时抽到即判负）；关闭依据 = 本牌侧行为与本体诅咒一致 + 源码零拦截（T031 枚举）+ EC-011 不可达性，明细见 `memory/log/032` §3.1。如需补做，须在 T035 删除探针后的重建覆盖前用现探针 jar 复跑。
 > **判读注意**：`patch.fountain.before/after` 与保护补丁的先后由 MTS 决定（本批两条日志都显示 suspend 后的 6 张，属预期）；`awprobe addcard FiendFire` 报 unknown 是因本体卡 ID 为 `Fiend Fire`（含空格），改用 BaseMod 控制台后成功，不影响判据。
+
+> **T038 构建与加载验收结果（2026-11-05 01:17–01:22 实测通过，判读见 `memory/log/036`）**
+>
+> 用户普通终端 `mvn package` 产物：`target/anthonyswrath.jar` = 游戏 `mods/anthonyswrath.jar`，113,394 B，2026-11-05 01:17:18，SHA256 `BBF6C534…D3AC`。`jar tf` 核对：`anthonyswrath/img/cards/AnthonysWrath.jpg`（250×190）、`AnthonysWrath_p.jpg`（500×380）、`strings/anthonyswrath/{eng,zhs}/{cards,run_mods}.json`、根 `ModTheSpire.json`（0.1.0，无 `${...}` 占位符）、无 `probe/` 类；空 `placeholder/` 目录条目见 §2 注。MTS 日志：Mod list 含 `anthonyswrath (0.1.0)`；6 个补丁类 / 10 个补丁处理组全部应用（含 3 个 `@SpirePatch2` 返回值替换：两个 `getCurse` 重载 + `getPurgeableCards`），无本 mod 补丁异常；游戏正常进主菜单 → 建自定义局（`postCreateStartingDeck adding [... anthonyswrath:AnthonysWrath]`）→ 退出时 `Clean shutdown successful`。
+>
+> **两处修复的目视复核**：用户确认选项名「安东尼之怒」（无「负面：」前缀）与单卡视图大图均正常（T042/T043）；日志中 8 次出现 `Finding texture: anthonyswrath/img/cards/AnthonysWrath_p.jpg` 且无对应 `No image` 告警，佐证 `_p` 大图被实际加载。
+>
+> **边界**：本次仅完成 T038 与两处目视复核；**T041（QS-01 至 QS-17 完整回归）未被覆盖**——该局仅到建局/查看卡面阶段，未发生战斗、洗牌、移除或卸载动作。
 
 | 编号 | 对应需求 | 操作 | 预期 |
 | :--- | :--- | :--- | :--- |
