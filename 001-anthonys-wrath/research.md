@@ -119,15 +119,16 @@
 
 - **Decision**: 诅咒牌继承 `CustomCard`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2（本体「不可打出」判定依据）、稀有度取参照牌实际使用的 `CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例；名称与描述取自双语 `strings/`，描述按参照牌措辞直接写明「不能被打出」「不能从牌组中移除」，不使用关键词样式或颜色标记。
 - **Rationale**: FR-004/005/012/013 要求与本体诅咒及参照牌行为一致；硬编码文本会违反宪法第二条。
-- **Implemented（2026-10-24，T010/T013）**: `cards/AnthonysWrathCurse` 的 `super(...)` 参数为 `(CARD_ID, NAME, "placeholder/AnthonysWrath.png", -2, DESCRIPTION, CURSE, CURSE, SPECIAL, NONE)`；`CardType.CURSE` 使本体 `canUpgrade()` 恒 false（`upgrade()` 仅因抽象而留空），`makeCopy()` 显式返回新实例。名称/描述静态取自 `CardCrawlGame.languagePack.getCardStrings(CARD_ID)`（`EditStrings` 先于 `EditCards` 触发，类在 `receiveEditCards` 首次加载时字符串已就绪）。贴图为开发期占位图 `src/main/resources/placeholder/AnthonysWrath.png`（由 `src/.gitignore` 忽略，T036 替换）；`ImageMaster.loadImage` 对缺失图片只告警并返回 null，故不能省略占位文件。
+- **Implemented（2026-10-24，T010/T013；贴图于 2026-11-05 T036 定稿）**: `cards/AnthonysWrathCurse` 的 `super(...)` 参数为 `(CARD_ID, NAME, IMAGE_PATH, -2, DESCRIPTION, CURSE, CURSE, SPECIAL, NONE)`；`CardType.CURSE` 使本体 `canUpgrade()` 恒 false（`upgrade()` 仅因抽象而留空），`makeCopy()` 显式返回新实例。名称/描述静态取自 `CardCrawlGame.languagePack.getCardStrings(CARD_ID)`（`EditStrings` 先于 `EditCards` 触发，类在 `receiveEditCards` 首次加载时字符串已就绪）。贴图为最终卡面 `anthonyswrath/img/cards/AnthonysWrath.jpg`（见 R-010）。
 - **Verified in game（2026-11-04，T034）**: 中英牌面由用户目视确认正常（QS-13）；两份 `cards.json` / `run_mods.json` 的 key 一一对应（T033 离线核对见 `memory/log/030` §2.5，T037 机械复核见 `memory/log/033`）。
 - **Alternatives considered**: 复用参照牌文本 key（否决：命名空间与卸载行为不可控）。
 
-## R-010 资源与占位贴图
+## R-010 资源与贴图
 
-- **Decision**: 中英双语文本放 `src/main/resources/strings/<modId>/`；开发期贴图放 `src/main/resources/placeholder/`，由 `src/` 层自己的 `.gitignore` 忽略，发布前替换为自制资源；`ModTheSpire.json` 随构建产出放在 jar 根。
+- **Decision**: 中英双语文本放 `src/main/resources/strings/<modId>/`；最终卡面贴图入库于 `src/main/resources/anthonyswrath/img/cards/AnthonysWrath.jpg`（250×190，随 `src` 层提交）；`ModTheSpire.json` 随构建产出放在 jar 根。开发期占位图机制（`placeholder/` + `src/.gitignore`）随 T036 退出——占位文件已删除，忽略规则保留以防本地再生成。
 - **Rationale**: 宪法第二条要求文本外置；不提交游戏本体图片（仓库纪律虽未写入宪法，但按既有约定执行）。
-- **Alternatives considered**: 先提交本体贴图、后替换（否决：会污染仓库历史）。
+- **Implemented（2026-11-05，T036；证据 `memory/log/034`）**: 卡面路径取 jar 内 classpath 相对路径 `anthonyswrath/img/cards/AnthonysWrath.jpg`。`CustomCard.loadCardImage` 把它交给 `ImageMaster.loadImage` → `new Texture(path)` → `FileHandle.read()`；libGDX 对 `Files.FileType.Internal` 且在磁盘上不存在的路径回退 `Class.getResourceAsStream("/" + path)`（`desktop-1.0.jar` 的 `FileHandle.read` 字节码复核），MTS 的 `MTSClassLoader` 把 mod jar 挂上 classpath，故 jar 内贴图可加载。离线模拟 jar 实测该 classpath 查找命中（41879 字节，与源文件 SHA256 一致）。
+- **Alternatives considered**: 先提交本体贴图、后替换（否决：会污染仓库历史）；保留开发期占位图与启动期 `Gdx.files.internal(...).exists()` 回退（否决：该检查是文件系统语义，对 jar 内资源恒为 false），且 T036 后最终贴图必然随 jar 存在，回退分支只会掩盖构建错误。
 
 ## R-011 三层验证记录
 

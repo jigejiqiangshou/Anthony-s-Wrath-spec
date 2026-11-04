@@ -85,7 +85,7 @@ src/main/java/<modId>/
 └── patches/vanilla/          # 原版判定点拦截(洗牌置底、入手判定与终局短路、不可移除、随机诅咒池)
 src/main/resources/
 ├── strings/<modId>/          # 中英双语文本(key 一一对应)
-├── placeholder/              # 开发期占位贴图(src/ 层 .gitignore 忽略)
+├── anthonyswrath/img/cards/  # 最终卡面贴图 T036(250×190;jar 内按 classpath 路径加载)
 └── ModTheSpire.json          # 加载器清单(jar 根)
 ```
 

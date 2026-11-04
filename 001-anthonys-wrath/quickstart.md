@@ -13,7 +13,7 @@
 ## 2. 构建与加载
 
 1. 在仓库根目录执行构建命令（首个基础任务确定确切命令，通常为 `mvn -q package`），预期 `BUILD SUCCESS` 且 `target/` 下生成 mod jar。
-2. 用 `jar tf <jar>` 检查产物：包含 `strings/` 下中英双语资源、诅咒牌贴图、jar 根 `ModTheSpire.json`；不含游戏本体图片与任何占位图的意外泄漏。
+2. 用 `jar tf <jar>` 检查产物：包含 `strings/` 下中英双语资源、诅咒牌贴图 `anthonyswrath/img/cards/AnthonysWrath.jpg`、jar 根 `ModTheSpire.json`；不含游戏本体图片与任何占位图的意外泄漏（如 `placeholder/`）。
 3. 把 jar 放入游戏目录 `mods/`（不存在则新建；创意工坊方式下本地 mod 仍从该目录加载），启动游戏：加载日志无异常，mod 列表中出现本 mod，游戏可正常进入主菜单。
 
 ## 3. 时序探针（实现前置）
