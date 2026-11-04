@@ -113,13 +113,14 @@
     - 全部「候选 → 删除」型 UI（ShopScreen/ShopRoom、CampfireTokeEffect（Peace Pipe）、EmptyCage、Astrolabe、NeowReward、Cleric、GoldenWing、BackToBasics、Beggar、DrugDealer、LivingWall、Bonfire、Designer、NoteForYourself、PurificationShrine、Transmogrifier、GremlinWheelGame）都先取 `getPurgeableCards()` 作为网格候选 → 由 T029 覆盖；
     - 直接删除点中：`Falling` 用 `CardHelper.returnCardOfType(ATTACK/SKILL/POWER)` 生成选项（诅咒不在范围内）；`WeMeetAgain` 的 `getRandomNonBasicCard()` 排除 `BASIC` 稀有度与 `CURSE` 类型；`Vampires.replaceAttacks()` 只删 Strikes；`CardGroup.removeCard(String)` 仅被 `AbstractDungeon.srcTransformCard` 使用（变化路径，`EC-003` 要求与参照牌一致、不得拦截）；`AbstractPlayer.useCard` 的 `removeCard` 只作用于战斗手牌。
     - 结论：拦截点恰好两个（T029 + T030），与参照牌的不可移除判定点同批，不多不少。
-- **Remaining**: T034 游戏内实测（QS-11 三类场景 + QS-12 变化/蓝蜡烛对照 + QS-13 文本）；未持有 Peace Pipe、未遇净化之泉的静态依据已由上述反汇编补齐。
+- **Verified in game（2026-11-04，T034；证据 `memory/log/032`、`quickstart.md` §4 的 T034 结果块）**: QS-11 全部通过——`awprobe purgetest` 两次 PASS（`inDeck=true inPurgeable=false`）；商店 / Transmogrifier / 休息点 Peace Pipe / Empty Cage / Astrolabe / Cleric 的候选均在 `getPurgeableCards` 调用点产生，实际移除的都不是本牌；净化之泉三次 `buttonEffect(0)` 由 `CurseRemovalGuard` 括号保护，事件后 `awprobe info`（masterDeck 7 张）与 `purgetest` 仍含本牌，run 记录 `event_choices` 的 Fountain of Cleansing `cards_removed=[]`；MTS 日志确认 T029 的 `@SpirePatch2` 返回值替换与 T030 的 Prefix/Postfix 均已应用。
 
 ## R-009 诅咒牌参数与文本对齐
 
 - **Decision**: 诅咒牌继承 `CustomCard`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2（本体「不可打出」判定依据）、稀有度取参照牌实际使用的 `CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例；名称与描述取自双语 `strings/`，描述按参照牌措辞直接写明「不能被打出」「不能从牌组中移除」，不使用关键词样式或颜色标记。
 - **Rationale**: FR-004/005/012/013 要求与本体诅咒及参照牌行为一致；硬编码文本会违反宪法第二条。
 - **Implemented（2026-10-24，T010/T013）**: `cards/AnthonysWrathCurse` 的 `super(...)` 参数为 `(CARD_ID, NAME, "placeholder/AnthonysWrath.png", -2, DESCRIPTION, CURSE, CURSE, SPECIAL, NONE)`；`CardType.CURSE` 使本体 `canUpgrade()` 恒 false（`upgrade()` 仅因抽象而留空），`makeCopy()` 显式返回新实例。名称/描述静态取自 `CardCrawlGame.languagePack.getCardStrings(CARD_ID)`（`EditStrings` 先于 `EditCards` 触发，类在 `receiveEditCards` 首次加载时字符串已就绪）。贴图为开发期占位图 `src/main/resources/placeholder/AnthonysWrath.png`（由 `src/.gitignore` 忽略，T036 替换）；`ImageMaster.loadImage` 对缺失图片只告警并返回 null，故不能省略占位文件。
+- **Verified in game（2026-11-04，T034）**: 中英牌面由用户目视确认正常（QS-13）；两份 `cards.json` / `run_mods.json` 的 key 一一对应（T033 离线核对见 `memory/log/030` §2.5，T037 机械复核见 `memory/log/033`）。
 - **Alternatives considered**: 复用参照牌文本 key（否决：命名空间与卸载行为不可控）。
 
 ## R-010 资源与占位贴图
@@ -145,6 +146,8 @@
 - **Decision**: 本牌入手即判负、无法自然停留在手牌，故用**探针版临时关闭「抽到即负」**在开发期实测「不可打出 / 不可被主动消耗」，并与参照牌同条件对照（含持「蓝蜡烛」的一次）；正常版只验判负。该开关只存在于探针构建，随 T035 一并移除，发布版不含。
 - **Rationale**: 直接观察不可打出需要牌停在手牌，正常版不可达；探针 + 参照牌对照兼顾可验证性与发布安全；本轮选择路线 b。
 - **Implemented（2026-10-29，T032）**: `run.RunState` 增加 `defeatSuspendedForProbe` 与 `isDefeatSuspendedForProbe()` / `setDefeatSuspendedForProbe(boolean)`；`run.DefeatOnDraw` 在卡牌判定通过后若开关打开则直接返回；探针命令 `awprobe defeatoff` / `awprobe defeaton` 负责切换并写日志。**该开关与命令只存在于探针构建，随 T035 与 `probe/` 一起删除；发布版无法关闭判负。** 实测步骤见 `quickstart.md` §4 的 2026-10-29 US5 段第 3 步（T034）。
+- **Verified in game（2026-11-04，T034；证据 `memory/log/032` §3）**: `awprobe defeatoff` 后本牌两次自然入手均停留在手牌、无 `deathScreen`；蓝蜡烛计数恰 1 次（run 记录 `Blue Candle=[1]`）并以 1 HP 打出、从手牌消耗；恶魔之焰打出后手牌 6→0、`exhaust 0→6`（含本牌，未写回牌组）；`transform` 本牌→`Injury`、参照牌→`Regret`（均非自身）。参照牌侧的「不可打出 / 蓝蜡烛 / 恶魔之焰」同条件对照未单独留证（bell 入组晚于对照窗口），按源码零拦截 + 本牌侧行为一致 + EC-011 不可达性关闭，明细见 `memory/log/032` §3.1。
+- **Removed（2026-11-04，T035）**: `defeatSuspendedForProbe` 开关、`RunState` 两个方法、`DefeatOnDraw` 短路与 `awprobe defeatoff/defeaton` 均随 `probe/` 删除；发布版无关闭判负入口（见 `memory/log/033`）。
 - **Alternatives considered**: 只做参照牌对照 +「不可达」论证（否决：对 FR-005 的直接验证不足）；在发布版保留调试开关（否决：违背发布洁净与不可被利用）。
 
 ## R-014 选项注册、选中状态与文本口径（2026-10-24 实现期实物核对，T007~T014）
@@ -175,7 +178,7 @@
 - **效果直接取牌的判定点**：R-005 实测确认三条通道（抽牌/临时牌/弃牌堆取牌走 `addToHand`；抽牌堆检索走 `addToTop`），按两个判定点实现即可覆盖。
 - **判负调用方式不正确**（误记放弃或不计失败）：以本体失败流程为准，实测同时核对结算界面与游戏记录。
 - **注入晚于牌组固定**：R-006 哨兵实验确认 `PostCreateStartingDeck` 注入牌在 Draft 填充后存活且早于首洗，落点定稿；实现后 QS-08 复验。
-- **不可移除入口枚举不全**：商店移除路径已实测（`getPurgeableCards` + `masterDeck.removeCard(obj)`）；净化之泉与休息点待实现后 QS-11 实测，清单以 `memory/facts/f005` 反汇编兜底。（2026-10-29：全库移除入口静态枚举完成，拦截点恰两个——`getPurgeableCards` 过滤 + 净化之泉括号保护；其余路径由本体自身按类型/稀有度排除，见 §R-008 Implemented）
+- **不可移除入口枚举不全**：商店移除路径已实测（`getPurgeableCards` + `masterDeck.removeCard(obj)`）；净化之泉与休息点待实现后 QS-11 实测，清单以 `memory/facts/f005` 反汇编兜底。（2026-10-29：全库移除入口静态枚举完成，拦截点恰两个——`getPurgeableCards` 过滤 + 净化之泉括号保护；其余路径由本体自身按类型/稀有度排除，见 §R-008 Implemented）（2026-11-04：T034 实测通过，三类场景均未移除本牌，见 `memory/log/032`）
 - **随机诅咒池排除时机不对**：R-007 两轮实测后改用 `StartGame` 钩子（新档与读档都触发且晚于池重建）；若时点再变则改 `initializeCardPools` 补丁。（2026-10-29：T027 实现期修正——池不是随机来源，改为 `@NoPools` 清池 + `CardLibrary.getCurse` 重载过滤；`StartGame` 不再承担池排除）
 - **读档后选项判定失效**：所有判定以存档恢复后的自定义模式项列表为准。
 - **Maven 本地依赖配置繁琐**：先用最小可编译配置打通构建，再补依赖声明。

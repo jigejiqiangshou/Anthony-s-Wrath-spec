@@ -18,6 +18,8 @@
 
 ## 3. 时序探针（实现前置）
 
+> **2026-11-04（T035）**：探针（`probe/` 与 `awprobe` 控制台命令、临时关闭判负的开关）已从发布版删除，本节保留为历史复现说明——需要复跑探针时请从 Git 历史取回 `probe/` 或回退 T035 的删除提交。**发布版的 T041 回归按 §4 的 QS 表用游戏内手段执行**（冰冻之眼 / 开发者控制台 / 本体存档）；§4 中标为 `awprobe` 的段落是探针版实测记录，不是发布版可执行步骤。
+
 构建一个只有日志输出的探针版本，在游戏内推进到以下场景并打印触发顺序与抽牌堆内容：
 
 - 进入战斗（战斗开始）；
@@ -25,7 +27,7 @@
 - 由卡牌或遗物触发的非耗尽重洗；
 - 使用「搜寻」类效果直接取牌；
 - 在「轮抽（Draft）」（或 Insanity / Sealed Deck）等改写开局牌组的自定义开局下进入战斗；Draft 开局牌组先为空、随后选牌填充。
-- 另需一个临时关闭「抽到即负」的探针开关，供 QS-12 在开发期验证 FR-005（发布前移除，见 T035）。
+- 另需一个临时关闭「抽到即负」的探针开关，供 QS-12 在开发期验证 FR-005（发布前移除，见 T035；已于 2026-11-04 随 T035 删除，QS-12 的验证见 §4 的 T034 结果块）。
 
 探针必须回答（结论决定实现落点）：
 
@@ -165,7 +167,7 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 > 3. 模式归属由 `runs/` 记录交叉确认（`is_daily` / `is_trial` / `daily_mods`），不单凭 `enabledMods` 猜测；四局起始时间与 `playtime` 精确对应（89 / 35 / 26 / 297 秒）。
 > 4. `awprobe.log` #3 的 `registered command:` 行是 `TimingProbe` 硬编码的旧子命令列表，**不能**据此判断 jar 为旧构建（该文本随 T035 删除）。
 
-> 2026-10-29 US5 实现完成（T029：`CardGroupGetPurgeableCardsPatch` 过滤全部「可移除候选」；T030：`FountainOfCurseRemovalPatch` + `run/CurseRemovalGuard` 括号式保护净化之泉批量删除；T031：静态枚举确认其余移除路径已被本体自身过滤覆盖，无需额外补丁；T032：`awprobe defeatoff/defeaton` 开发期开关；T033：中英文本定稿核对；离线自检见 `memory/log/030`），**T034 待实测**（沿用 T028 的同一构建，无需再次重建；执行前删除旧 `awprobe.log`）。
+> 2026-10-29 US5 实现完成（T029：`CardGroupGetPurgeableCardsPatch` 过滤全部「可移除候选」；T030：`FountainOfCurseRemovalPatch` + `run/CurseRemovalGuard` 括号式保护净化之泉批量删除；T031：静态枚举确认其余移除路径已被本体自身过滤覆盖，无需额外补丁；T032：`awprobe defeatoff/defeaton` 开发期开关；T033：中英文本定稿核对；离线自检见 `memory/log/030`），**T034 已于 2026-11-04 实测通过**（沿用 T028 的同一构建，无需再次重建；结果块见下方，判读记录 `memory/log/032`）。
 >
 > **T034 步骤**（QS-11 / QS-12 / QS-13）
 >
@@ -179,6 +181,24 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >    - **变化对照**：`awprobe transform anthonyswrath:AnthonysWrath` 与 `awprobe transform bell`——两者结果都只会是「其它随机诅咒」，本牌与参照牌都**不会**作为变化结果出现（`awprobe transform` 只计算并记录结果，不写回牌组，与 T004 相同）。`awprobe curseprobe` 也应保持 PASS。
 >    - 验证结束后执行 `awprobe defeaton` 恢复判负，并按 QS-06 的方式再自然抽一次确认判负回归（只结算一次）。
 > 4. **文本与 key（QS-13，T033）**：切换中英文查看牌面：中文描述「不能被打出。 NL 不能从牌组中移除。」、英文 `Unplayable. NL Cannot be removed from your deck.`，与参照牌「铃铛的诅咒」同款措辞、无关键词样式或颜色标记；两张 `strings/` 的 key 一一对应（离线已核对，见 `memory/log/030`）。
+
+> **T034 结果（2026-11-04 23:18–23:56 实测，判读见 `memory/log/032`）**
+>
+> 证据：`awprobe.log` 609 行/两段启动（第一段 23:18–23:45 整局，第二段 23:46–23:48 仅建局）；`runs/WATCHER/1793807122.run`（`is_trial=true`、`floor_reached=18`、`playtime=1607`、`victory=false`、`killed_by=Slime Boss`、`master_deck` 7 张含本牌、`relics` 含 `Blue Candle` / `relic_stats.Blue Candle=[1]`）；MTS 进程日志（Mod list 含 `anthonyswrath (0.1.0)`，T029/T030 补丁均应用且 `@SpirePatch2` 生成返回值替换）；jar 哈希 `C63C9B46…2DC81`（与 T028 同构建，实测前后未变）。
+>
+> | 项目 | 结果 | 证据摘要 |
+> | :--- | :--- | :--- |
+> | QS-11 候选列表 | PASS | `purgetest` 两次 PASS（#15/#146）；商店 #50/#51、Transmogrifier #52–#55、Peace Pipe #116–#118/#151–#152、Empty Cage #119–#122、Astrolabe #123–#132、Cleric #133–#135 的候选均由 `getPurgeableCards` 产生且实际移除的不是本牌；用户目视候选列表正常、本牌不在其中 |
+> | QS-11 净化之泉 | PASS | #136–#141 三次 `buttonEffect(0)` 的 `patch.fountain.*` 显示本牌被 `CurseRemovalGuard` 临时移出（预期观测）；事件后 #143 `info` masterDeck=7 含本牌、#144–#146 `purgetest` PASS；run 记录 `event_choices` Fountain `cards_removed=[]` |
+> | QS-12 判负开关/手牌停留 | PASS | #148 `defeatoff`；#188/#364 本牌两次入手均无 `deathScreen` |
+> | QS-12 蓝蜡烛 | PASS | run 记录 `Blue Candle:[1]`；#229 本牌经 `AbstractPlayer.useCard` 从手牌消耗（1 次触发） |
+> | QS-12 恶魔之焰 | PASS | #359 控制台加 `Fiend Fire`；#364 本牌在手；#399 打出后 #400 `hand=0`、`exhaust 0→6`、`discard=0`（手牌含本牌全部消耗） |
+> | QS-12 变化对照 | PASS | #417 本牌→`Injury`；#422 `CurseOfTheBell`→`Regret`；#425 `curseprobe` PASS |
+> | QS-12 判负回归 | PASS | #427 `defeaton`；#469/#470 boss 战本牌入手触发一次 `deathScreen`（caller `DeathScreen.<init> <- CardGroup.addToHand <- AbstractPlayer.draw`），run 记录 `victory=false` |
+> | QS-13 文本 | PASS | 用户 2026-11-04 目视中英牌面正常；T033 离线 key 核对（`memory/log/030` §2.5） |
+>
+> **留证缺口（不阻塞）**：参照牌「铃铛的诅咒」的「不可打出 / 蓝蜡烛 / 恶魔之焰」同条件对照未单独留证（bell 在 23:44 后才入牌组，boss 战与本牌同时抽到即判负）；关闭依据 = 本牌侧行为与本体诅咒一致 + 源码零拦截（T031 枚举）+ EC-011 不可达性，明细见 `memory/log/032` §3.1。如需补做，须在 T035 删除探针后的重建覆盖前用现探针 jar 复跑。
+> **判读注意**：`patch.fountain.before/after` 与保护补丁的先后由 MTS 决定（本批两条日志都显示 suspend 后的 6 张，属预期）；`awprobe addcard FiendFire` 报 unknown 是因本体卡 ID 为 `Fiend Fire`（含空格），改用 BaseMod 控制台后成功，不影响判据。
 
 | 编号 | 对应需求 | 操作 | 预期 |
 | :--- | :--- | :--- | :--- |
