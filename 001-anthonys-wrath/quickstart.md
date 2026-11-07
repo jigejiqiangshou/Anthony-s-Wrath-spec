@@ -182,7 +182,7 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >    - **主动消耗对照**：`awprobe addcard FiendFire`（恶魔之焰，消耗手牌）后打出，本牌与参照牌同样被消耗、不写回牌组。
 >    - **变化对照**：`awprobe transform anthonyswrath:AnthonysWrath` 与 `awprobe transform bell`——两者结果都只会是「其它随机诅咒」，本牌与参照牌都**不会**作为变化结果出现（`awprobe transform` 只计算并记录结果，不写回牌组，与 T004 相同）。`awprobe curseprobe` 也应保持 PASS。
 >    - 验证结束后执行 `awprobe defeaton` 恢复判负，并按 QS-06 的方式再自然抽一次确认判负回归（只结算一次）。
-> 4. **文本与 key（QS-13，T033）**：切换中英文查看牌面：中文描述「不能被打出。 NL 不能从牌组中移除。」、英文 `Unplayable. NL Cannot be removed from your deck.`，与参照牌「铃铛的诅咒」同款措辞、无关键词样式或颜色标记；两张 `strings/` 的 key 一一对应（离线已核对，见 `memory/log/030`）。（**2026-11-07 更新**：该旧文案漏记本牌特有的两项效果，已由 T044 修订；QS-13 的新判据见下方 T044 段与 §4 QS 表，旧文案仅作历史记录。）
+> 4. **文本与 key（QS-13，T033）**：切换中英文查看牌面：中文描述「不能被打出。 NL 不能从牌组中移除。」、英文 `Unplayable. NL Cannot be removed from your deck.`，与参照牌「铃铛的诅咒」同款措辞、无关键词样式或颜色标记；两张 `strings/` 的 key 一一对应（离线已核对，见 `memory/log/030`）。（**2026-11-07 更新**：该旧文案漏记本牌特有的两项效果，已由 T044 修订；QS-13 的新判据见下方 T044 段与 §4 QS 表，旧文案仅作历史记录。新文案已于 2026-11-07 由用户重构建后目视复核通过。）
 
 > **T034 结果（2026-11-04 23:18–23:56 实测，判读见 `memory/log/032`）**
 >
@@ -197,7 +197,7 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 > | QS-12 恶魔之焰 | PASS | #359 控制台加 `Fiend Fire`；#364 本牌在手；#399 打出后 #400 `hand=0`、`exhaust 0→6`、`discard=0`（手牌含本牌全部消耗） |
 > | QS-12 变化对照 | PASS | #417 本牌→`Injury`；#422 `CurseOfTheBell`→`Regret`；#425 `curseprobe` PASS |
 > | QS-12 判负回归 | PASS | #427 `defeaton`；#469/#470 boss 战本牌入手触发一次 `deathScreen`（caller `DeathScreen.<init> <- CardGroup.addToHand <- AbstractPlayer.draw`），run 记录 `victory=false` |
-> | QS-13 文本 | PASS（旧文案） | 用户 2026-11-04 目视中英牌面正常；T033 离线 key 核对（`memory/log/030` §2.5）。**2026-11-07 已由 T044 修订为四效果齐全文案，待重构建后按新判据复核** |
+> | QS-13 文本 | PASS（旧文案） | 用户 2026-11-04 目视中英牌面正常；T033 离线 key 核对（`memory/log/030` §2.5）。**2026-11-07 已由 T044 修订为四效果齐全文案，用户重构建后目视确认正常 → 新判据 PASS（见 T044 段与 `memory/log/038`）** |
 >
 > **留证缺口（不阻塞）**：参照牌「铃铛的诅咒」的「不可打出 / 蓝蜡烛 / 恶魔之焰」同条件对照未单独留证（bell 在 23:44 后才入牌组，boss 战与本牌同时抽到即判负）；关闭依据 = 本牌侧行为与本体诅咒一致 + 源码零拦截（T031 枚举）+ EC-011 不可达性，明细见 `memory/log/032` §3.1。如需补做，须在 T035 删除探针后的重建覆盖前用现探针 jar 复跑。
 > **判读注意**：`patch.fountain.before/after` 与保护补丁的先后由 MTS 决定（本批两条日志都显示 suspend 后的 6 张，属预期）；`awprobe addcard FiendFire` 报 unknown 是因本体卡 ID 为 `Fiend Fire`（含空格），改用 BaseMod 控制台后成功，不影响判据。
@@ -210,7 +210,7 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 >
 > **边界**：本次仅完成 T038 与两处目视复核；**T041（QS-01 至 QS-17 完整回归）未被覆盖**——该局仅到建局/查看卡面阶段，未发生战斗、洗牌、移除或卸载动作。
 
-> **T044 牌面文本修订（2026-11-07，用户反馈；实现记录 `memory/log/037`）**
+> **T044 牌面文本修订（2026-11-07，用户反馈；实现记录 `memory/log/037`、目视复核 `memory/log/038`）**
 >
 > 用户 2026-11-07 确认完整回归无功能问题后反馈：牌面描述与参照牌「铃铛的诅咒」完全相同，未记载本牌特有的「每次洗牌后置于抽牌堆底部」与「抽到即判负」两项效果。已修订双语 `cards.json`（spec 层 FR-013 同步校正）：
 >
@@ -219,7 +219,7 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 > | 中文 | 「不能被打出。 NL 不能从牌组中移除。 NL 每次洗牌后置于抽牌堆底部。 NL 抽到这张牌时死亡。」 |
 > | 英文 | `Unplayable. NL Cannot be removed from your deck. NL On shuffle, bottom of your draw pile. NL When drawn, you die.` |
 >
-> **复核步骤（待用户重构建后执行）**：`mvn clean package` → 覆盖 `mods/anthonyswrath.jar` → 进游戏切换中英语言查看该牌（总览小卡与单卡视图）：四项效果全部可见、无关键词样式、无文字溢出牌面；key 集合两语言一一对应（离线已核对）。结果回传后勾选 T044。
+> **复核结果（2026-11-07，T044 PASS）**：用户重构建后游戏内切换中英查看该牌（总览小卡 + 单卡视图），确认新牌面正常——四项效果可见、无关键词样式、无文字溢出。复核步骤保留如下供复跑：`mvn clean package` → 覆盖 `mods/anthonyswrath.jar` → 进游戏切换中英语言查看该牌：四项效果全部可见、无关键词样式、无文字溢出牌面；key 集合两语言一一对应（离线已核对）。
 >
 > **离线估算（方法见 `memory/log/037`）**：按本体 `AbstractCard` 的渲染常量（描述字体 24px、英文换行宽 237、中文换行宽 216 = 每行 9 个全角字、牌面坐标宽 300 / 高 420）与 jar 内字体度量，新文案中文约 5 个描述行、英文约 6 个描述行；参照牌旧文案为中文 2 行 / 英文 3 行，本体在超过 5 行时仅在开发模式打印 `has lots of text` 告警。**牌面实际高度/换行须以游戏内目视为准**；若英文行数过高或换行不理想，可再压缩英文措辞（中文为玩家主语言，优先保持中文表述完整）。
 
@@ -257,4 +257,4 @@ awprobe sinktest                  DrawPileOrdering 确定性自检（多副本�
 - [x] plan 的 Constitution Check 与规格 checklists 保持全过（2026-11-07 复核）；
 - [x] 未选中路径（QS-10）与卸载路径（QS-14）均无回归（在上述用户确认范围内）。
 
-> **2026-11-07 牌面文本修订的待办**：T044 已修订双语描述（FR-013 / QS-13 判据同步更新），但**尚未**在新构建上目视复核；该复核完成前，QS-13 的新判据视为待复核，不重复计入 T041。
+> **2026-11-07 牌面文本修订的复核结论**：T044 已修订双语描述（FR-013 / QS-13 判据同步更新）；用户重构建后游戏内目视确认新牌面正常（四项效果可见、无溢出），**QS-13 新判据 PASS、T044 勾选**，见 `memory/log/038`。全部 QS 判据至此均为通过状态。
