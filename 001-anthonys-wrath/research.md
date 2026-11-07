@@ -117,10 +117,11 @@
 
 ## R-009 诅咒牌参数与文本对齐
 
-- **Decision**: 诅咒牌继承 `CustomCard`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2（本体「不可打出」判定依据）、稀有度取参照牌实际使用的 `CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例；名称与描述取自双语 `strings/`，描述按参照牌措辞直接写明「不能被打出」「不能从牌组中移除」，不使用关键词样式或颜色标记。
+- **Decision**: 诅咒牌继承 `CustomCard`：`CardType.CURSE`、`CardColor.CURSE`、费用 -2（本体「不可打出」判定依据）、稀有度取参照牌实际使用的 `CardRarity.SPECIAL`、不可升级、无使用效果、`makeCopy()` 返回新实例；名称与描述取自双语 `strings/`，描述为纯文本、不使用关键词样式或颜色标记，**逐项写明四项效果**（不能被打出、不能从牌组中移除、每次洗牌后位于抽牌堆底部、抽到即判负），其中「不可移除」沿用参照牌措辞，其余效果用简明陈述句；允许紧凑表述以适配牌面高度，不要求逐字复刻参照牌文本（2026-11-07 校正，见下方 Correction）。
 - **Rationale**: FR-004/005/012/013 要求与本体诅咒及参照牌行为一致；硬编码文本会违反宪法第二条。
 - **Implemented（2026-10-24，T010/T013；贴图于 2026-11-05 T036 定稿）**: `cards/AnthonysWrathCurse` 的 `super(...)` 参数为 `(CARD_ID, NAME, IMAGE_PATH, -2, DESCRIPTION, CURSE, CURSE, SPECIAL, NONE)`；`CardType.CURSE` 使本体 `canUpgrade()` 恒 false（`upgrade()` 仅因抽象而留空），`makeCopy()` 显式返回新实例。名称/描述静态取自 `CardCrawlGame.languagePack.getCardStrings(CARD_ID)`（`EditStrings` 先于 `EditCards` 触发，类在 `receiveEditCards` 首次加载时字符串已就绪）。贴图为最终卡面 `anthonyswrath/img/cards/AnthonysWrath.jpg`（见 R-010）。
 - **Verified in game（2026-11-04，T034）**: 中英牌面由用户目视确认正常（QS-13）；两份 `cards.json` / `run_mods.json` 的 key 一一对应（T033 离线核对见 `memory/log/030` §2.5，T037 机械复核见 `memory/log/033`）。
+- **Correction（2026-11-07，T044；证据 `memory/log/037`）**: T033 初版把「按参照牌措辞写」理解成逐字复刻参照牌文本，牌面因此只写了「不能被打出 / 不能从牌组中移除」，漏记本牌特有的「每次洗牌后置于抽牌堆底部」与「抽到即判负」两项效果（用户 2026-11-07 反馈）。已改为四效果齐全的纯文本文案：中文「不能被打出。 NL 不能从牌组中移除。 NL 每次洗牌后置于抽牌堆底部。 NL 抽到这张牌时死亡。」、英文 `Unplayable. NL Cannot be removed from your deck. NL On shuffle, bottom of your draw pile. NL When drawn, you die.`。离线按本体 `AbstractCard` 渲染常量估算描述行数：中文 5 行、英文 6 行（参照牌旧文案中文 2 行 / 英文 3 行；本体开发期在超过 5 行时打印 `has lots of text` 告警），牌面高度余量见 log/037。**新文案待用户重构建后游戏内目视复核**；上一条「Verified in game」对应旧文案。
 - **Alternatives considered**: 复用参照牌文本 key（否决：命名空间与卸载行为不可控）。
 
 ## R-010 资源与贴图
